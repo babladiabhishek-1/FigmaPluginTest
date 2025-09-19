@@ -1,0 +1,14 @@
+{
+  "name": "Design Token Exporter Pro",
+  "id": "design-token-exporter-pro",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["https://api.github.com"]
+  },
+  "permissions": [
+    "currentuser"
+  ]
+}

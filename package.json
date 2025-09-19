@@ -1,0 +1,25 @@
+{
+  "name": "design-token-exporter",
+  "version": "1.0.0",
+  "description": "A Figma plugin to export design tokens from variables and styles",
+  "main": "code.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.88.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "figma",
+    "plugin",
+    "design-tokens",
+    "export"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+
+

@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token Exporter</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+      color: #111;
+      display: flex;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+    /* Side Panel */
+    #side-panel {
+      width: 300px;
+      background-color: #fff;
+      border-right: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #side-panel h3 {
+      margin: 0;
+      padding: 16px;
+      background-color: #f8f9fa;
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    #variables-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .variable-item {
+      padding: 8px 12px;
+      margin: 4px 0;
+      background-color: #f8f9fa;
+      border-radius: 6px;
+      border: 1px solid #e9ecef;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .variable-item:hover {
+      background-color: #e9ecef;
+      border-color: #007aff;
+    }
+
+    .variable-item.selected {
+      background-color: #e3f2fd;
+      border-color: #007aff;
+    }
+
+    .variable-name {
+      font-weight: 500;
+      font-size: 13px;
+      color: #111;
+      margin-bottom: 2px;
+    }
+
+    .variable-meta {
+      font-size: 11px;
+      color: #666;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .variable-type {
+      background-color: #007aff;
+      color: white;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .variable-description {
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+      font-style: italic;
+    }
+
+    /* Main Panel */
+    #main-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #ffffff;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid #e0e0e0;
+      background: #ffffff;
+      min-height: 40px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header-icon {
+      width: 20px;
+      height: 20px;
+      background: #007aff;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 11px;
+      color: white;
+    }
+
+    .header-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #111;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .header-btn {
+      width: 24px;
+      height: 24px;
+      border: none;
+      border-radius: 2px;
+      background: transparent;
+      color: #666;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+    }
+
+    .header-btn:hover {
+      background: #f0f0f0;
+      color: #111;
+    }
+
+    /* Content Area */
+    .content-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .format-info {
+      padding: 12px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .export-actions {
+      padding: 12px;
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+      font-weight: 500;
+    }
+
+    .btn-primary {
+      background-color: #007aff;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: #005bb5;
+    }
+
+    .btn-secondary {
+      background-color: #e0e0e0;
+      color: #111;
+    }
+
+    .btn-secondary:hover {
+      background-color: #d1d1d1;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* GitHub Panel */
+    .github-panel {
+      padding: 12px;
+      background: #ffffff;
+    }
+
+    .github-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .github-header h3 {
+      font-size: 14px;
+      margin-bottom: 4px;
+      color: #111;
+    }
+
+    .github-header p {
+      color: #666;
+      font-size: 11px;
+    }
+
+    .github-form {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: #111;
+      margin-bottom: 4px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 2px;
+      font-size: 11px;
+    }
+
+    .form-group small {
+      font-size: 10px;
+      color: #666;
+      margin-top: 2px;
+      display: block;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .github-status {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    .status-message {
+      font-size: 11px;
+      color: #111;
+    }
+
+    .github-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    /* Output Area */
+    #output-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 12px;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    #json-output {
+      flex: 1;
+      width: 100%;
+      box-sizing: border-box;
+      font-family: monospace;
+      font-size: 11px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 8px;
+      resize: none;
+      min-height: 200px;
+    }
+
+    .output-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .status {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #666;
+    }
+
+    /* Tab Styling */
+    .tab-container {
+      display: flex;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #666;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      color: #111;
+      background-color: #f5f5f5;
+    }
+
+    .tab-btn.active {
+      color: #007aff;
+      border-bottom-color: #007aff;
+    }
+
+    .tab-content {
+      display: none;
+      margin-bottom: 16px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .tab-content p {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <!-- Side Panel -->
+  <div id="side-panel">
+    <h3>Available Variables</h3>
+    <div id="variables-list">
+      <div class="loading">Loading variables...</div>
+    </div>
+  </div>
+
+  <!-- Main Panel -->
+  <div id="main-panel">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="header-icon">DT</div>
+        <div class="header-title">Design Token Exporter Pro</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" id="refresh-btn" title="Refresh Variables">🔄</button>
+        <button class="header-btn" id="settings-btn" title="Settings">⚙️</button>
+      </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tab-container">
+      <button class="tab-btn active" data-tab="standard">Standard</button>
+      <button class="tab-btn" data-tab="dtcg">DTCG</button>
+      <button class="tab-btn" data-tab="tailwind">Tailwind</button>
+      <button class="tab-btn" data-tab="github">GitHub</button>
+    </div>
+
+    <!-- Content Area -->
+    <div class="content-area">
+      <!-- Standard Format Tab -->
+      <div id="standard-tab" class="tab-content active">
+        <div class="format-info">Standard format with $type, $value, and $description properties</div>
+        <div class="export-actions">
+          <button id="export-btn" class="btn btn-primary">Export Standard Tokens</button>
+        </div>
+      </div>
+
+      <!-- DTCG Format Tab -->
+      <div id="dtcg-tab" class="tab-content">
+        <div class="format-info">Design Tokens Community Group format with themes and metadata</div>
+        <div class="export-actions">
+          <button id="export-dtcg-btn" class="btn btn-primary">Export DTCG Tokens</button>
+          <button id="export-enhanced-dtcg-btn" class="btn btn-secondary">Export Enhanced DTCG</button>
+        </div>
+      </div>
+
+      <!-- Tailwind CSS Format Tab -->
+      <div id="tailwind-tab" class="tab-content">
+        <div class="format-info">Tailwind CSS configuration file for modern web development</div>
+        <div class="export-actions">
+          <button id="export-tailwind-css-btn" class="btn btn-primary">Export Tailwind Config</button>
+        </div>
+      </div>
+
+      <!-- GitHub Integration Tab -->
+      <div id="github-tab" class="tab-content">
+        <div class="github-panel">
+          <div class="github-header">
+            <h3>🚀 GitHub Integration</h3>
+            <p>Push your design tokens directly to GitHub repository</p>
+          </div>
+          
+          <div class="github-form">
+            <div class="form-group">
+              <label for="github-repo">Repository URL</label>
+              <input type="text" id="github-repo" placeholder="https://github.com/username/repo" />
+            </div>
+            
+            <div class="form-group">
+              <label for="github-token">Personal Access Token</label>
+              <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
+              <small>Create a token with repo permissions at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a></small>
+            </div>
+            
+            <div class="form-group">
+              <label for="github-branch">Branch</label>
+              <input type="text" id="github-branch" value="main" placeholder="main" />
+            </div>
+            
+            <div class="form-group">
+              <label for="github-path">File Path</label>
+              <input type="text" id="github-path" value="" placeholder="Leave empty for root directory" />
+            </div>
+            
+            <div class="form-actions">
+              <button class="btn btn-primary" id="test-connection-btn">Test Connection</button>
+              <button class="btn btn-secondary" id="save-github-settings-btn">Save Settings</button>
+            </div>
+          </div>
+          
+          <div class="github-status" id="github-status" style="display: none;">
+            <div class="status-message" id="github-status-message"></div>
+          </div>
+          
+          <div class="github-actions">
+            <button class="btn btn-primary" id="one-tap-push-btn" disabled>🚀 1-Tap Push (DTCG)</button>
+            <button class="btn btn-secondary" id="push-all-formats-btn" disabled>Push All Formats</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Output Area -->
+      <div id="output-container">
+        <textarea id="json-output" readonly placeholder="Your exported tokens will appear here..."></textarea>
+        <div class="output-actions">
+          <button id="copy-btn" class="btn btn-secondary" disabled>Copy to Clipboard</button>
+          <button id="download-btn" class="btn btn-secondary" disabled>Download File</button>
+        </div>
+        <div id="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 🔧 GITHUB CREDENTIALS - UPDATE THESE
+    const TEST_CREDENTIALS = {
+      repo: 'https://github.com/eidra-umain/umain-test-tokens',
+      token: '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',
+      branch: 'main',
+      path: ''
+    };
+
+    // DOM Elements
+    const exportBtn = document.getElementById('export-btn');
+    const exportDTCGBtn = document.getElementById('export-dtcg-btn');
+    const exportEnhancedDTCGBtn = document.getElementById('export-enhanced-dtcg-btn');
+    const exportTailwindCSSBtn = document.getElementById('export-tailwind-css-btn');
+    const copyBtn = document.getElementById('copy-btn');
+    const downloadBtn = document.getElementById('download-btn');
+    const output = document.getElementById('json-output');
+    const status = document.getElementById('status');
+    const variablesList = document.getElementById('variables-list');
+    const refreshBtn = document.getElementById('refresh-btn');
+
+    // GitHub elements
+    const githubRepoInput = document.getElementById('github-repo');
+    const githubTokenInput = document.getElementById('github-token');
+    const githubBranchInput = document.getElementById('github-branch');
+    const githubPathInput = document.getElementById('github-path');
+    const testConnectionBtn = document.getElementById('test-connection-btn');
+    const saveSettingsBtn = document.getElementById('save-github-settings-btn');
+    const oneTapPushBtn = document.getElementById('one-tap-push-btn');
+    const pushAllFormatsBtn = document.getElementById('push-all-formats-btn');
+    const githubStatus = document.getElementById('github-status');
+    const githubStatusMessage = document.getElementById('github-status-message');
+
+    // Load variables on startup
+    parent.postMessage({ pluginMessage: { type: 'get-variables' } }, '*');
+
+    // Initialize GitHub settings
+    githubRepoInput.value = TEST_CREDENTIALS.repo;
+    githubTokenInput.value = TEST_CREDENTIALS.token;
+    githubBranchInput.value = TEST_CREDENTIALS.branch;
+    githubPathInput.value = TEST_CREDENTIALS.path;
+
+    // Tab functionality
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabBtns.forEach(btn => {
+      btn.onclick = () => {
+        const targetTab = btn.getAttribute('data-tab');
+        
+        // Remove active class from all tabs and contents
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        
+        // Add active class to clicked tab and corresponding content
+        btn.classList.add('active');
+        document.getElementById(targetTab + '-tab').classList.add('active');
+      };
+    });
+
+    // Export button handlers
+    exportBtn.onclick = () => {
+      output.value = 'Exporting standard tokens, please wait...';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      status.textContent = '';
+      parent.postMessage({ pluginMessage: { type: 'export-tokens' } }, '*');
+    };
+
+    exportDTCGBtn.onclick = () => {
+      output.value = 'Exporting DTCG format, please wait...';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      status.textContent = '';
+      parent.postMessage({ pluginMessage: { type: 'export-dtcg-tokens' } }, '*');
+    };
+
+    exportEnhancedDTCGBtn.onclick = () => {
+      output.value = 'Exporting enhanced DTCG format, please wait...';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      status.textContent = '';
+      parent.postMessage({ pluginMessage: { type: 'export-enhanced-dtcg' } }, '*');
+    };
+
+    exportTailwindCSSBtn.onclick = () => {
+      output.value = 'Exporting Tailwind CSS config, please wait...';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      status.textContent = '';
+      parent.postMessage({ pluginMessage: { type: 'export-tailwind-css' } }, '*');
+    };
+
+
+    // Refresh variables
+    refreshBtn.onclick = () => {
+      variablesList.innerHTML = '<div class="loading">Refreshing variables...</div>';
+      parent.postMessage({ pluginMessage: { type: 'get-variables' } }, '*');
+    };
+
+    // Copy to clipboard
+    copyBtn.onclick = () => {
+      if (output.value) {
+        navigator.clipboard.writeText(output.value).then(() => {
+          status.textContent = 'Copied to clipboard!';
+          setTimeout(() => status.textContent = '', 2000);
+        }).catch(err => {
+          status.textContent = 'Failed to copy.';
+          console.error('Copy failed', err);
+        });
+      }
+    };
+
+    // Download file
+    downloadBtn.onclick = () => {
+      if (output.value) {
+        const blob = new Blob([output.value], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'design-tokens.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        status.textContent = 'File downloaded!';
+        setTimeout(() => status.textContent = '', 2000);
+      }
+    };
+
+    // GitHub functionality
+    testConnectionBtn.onclick = () => {
+      const repoUrl = githubRepoInput.value;
+      const token = githubTokenInput.value;
+      
+      if (!repoUrl || !token) {
+        showGitHubStatus('Please enter repository URL and token', 'error');
+        return;
+      }
+      
+      showGitHubStatus('Testing connection...', 'info');
+      
+      // Test GitHub API connection
+      const urlMatch = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+      if (!urlMatch) {
+        showGitHubStatus('Invalid GitHub repository URL', 'error');
+        return;
+      }
+      
+      const owner = urlMatch[1];
+      const repo = urlMatch[2];
+      
+      fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          showGitHubStatus('✅ Connection successful!', 'success');
+          oneTapPushBtn.disabled = false;
+          pushAllFormatsBtn.disabled = false;
+        } else {
+          showGitHubStatus('❌ Connection failed. Check your credentials.', 'error');
+        }
+      })
+      .catch(error => {
+        showGitHubStatus('❌ Connection failed: ' + error.message, 'error');
+      });
+    };
+
+    saveSettingsBtn.onclick = () => {
+      showGitHubStatus('Settings saved!', 'success');
+    };
+
+    oneTapPushBtn.onclick = () => {
+      if (!output.value) {
+        showGitHubStatus('Please export tokens first', 'error');
+        return;
+      }
+      
+      const repoUrl = githubRepoInput.value;
+      const token = githubTokenInput.value;
+      const branch = githubBranchInput.value || 'main';
+      const path = githubPathInput.value || '';
+      
+      showGitHubStatus('Pushing to GitHub...', 'info');
+      
+      parent.postMessage({
+        pluginMessage: {
+          type: 'push-to-github',
+          repoUrl: repoUrl,
+          token: token,
+          branch: branch,
+          path: path,
+          content: output.value,
+          filename: 'tokens.json'
+        }
+      }, '*');
+    };
+
+    pushAllFormatsBtn.onclick = () => {
+      showGitHubStatus('Push all formats not implemented yet', 'info');
+    };
+
+    function showGitHubStatus(message, type) {
+      githubStatus.style.display = 'block';
+      githubStatusMessage.textContent = message;
+      githubStatus.className = `github-status ${type}`;
+    }
+
+    // Render variables list
+    function renderVariables(variables) {
+      if (variables.length === 0) {
+        variablesList.innerHTML = '<div class="loading">No variables found in this file.</div>';
+        return;
+      }
+
+      variablesList.innerHTML = variables.map(variable => `
+        <div class="variable-item" data-id="${variable.id}">
+          <div class="variable-name">${variable.name}</div>
+          <div class="variable-meta">
+            <span>${variable.collection}</span>
+            <span class="variable-type">${variable.type}</span>
+          </div>
+          ${variable.description ? `<div class="variable-description">${variable.description}</div>` : ''}
+        </div>
+      `).join('');
+
+      // Add click handlers for variable items
+      document.querySelectorAll('.variable-item').forEach(item => {
+        item.onclick = () => {
+          // Remove selection from all items
+          document.querySelectorAll('.variable-item').forEach(i => i.classList.remove('selected'));
+          // Add selection to clicked item
+          item.classList.add('selected');
+        };
+      });
+    }
+
+    window.onmessage = event => {
+      const message = event.data.pluginMessage;
+      if (message.type === 'export-complete') {
+        output.value = message.jsonString;
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
+        status.textContent = 'Standard export successful!';
+      } else if (message.type === 'export-dtcg-complete') {
+        output.value = message.jsonString;
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
+        status.textContent = 'DTCG export successful!';
+      } else if (message.type === 'export-enhanced-dtcg-complete') {
+        output.value = message.jsonString;
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
+        status.textContent = 'Enhanced DTCG export successful!';
+      } else if (message.type === 'export-tailwind-css-complete') {
+        output.value = message.tailwindConfig;
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
+        status.textContent = 'Tailwind CSS export successful!';
+      } else if (message.type === 'github-push-complete') {
+        if (message.result.success) {
+          showGitHubStatus('✅ ' + message.result.message, 'success');
+        } else {
+          showGitHubStatus('❌ ' + message.result.message, 'error');
+        }
+      } else if (message.type === 'variables-loaded') {
+        renderVariables(message.variables);
+      } else if (message.type === 'export-error') {
+        output.value = `Error: ${message.message}`;
+        copyBtn.disabled = true;
+        downloadBtn.disabled = true;
+        status.textContent = 'Export failed!';
+      }
+    };
+  </script>
+</body>
+</html>
