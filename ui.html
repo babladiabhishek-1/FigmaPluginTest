@@ -667,6 +667,17 @@
         <div class="export-actions">
           <button id="export-token-studio-btn" class="btn btn-primary">Export Token Studio</button>
         </div>
+        <div class="output-container">
+          <div class="output-header">
+            <h4>Token Studio Output</h4>
+            <div class="output-actions">
+              <button id="copy-token-studio-btn" class="btn btn-secondary" disabled>Copy</button>
+              <button id="download-token-studio-btn" class="btn btn-secondary" disabled>Download</button>
+            </div>
+          </div>
+          <textarea id="token-studio-output" class="output-textarea" readonly placeholder="Token Studio format will appear here when you switch to this tab..."></textarea>
+          <div class="status" id="token-studio-status">Ready to generate Token Studio format</div>
+        </div>
       </div>
 
       <!-- GitHub Integration Tab -->
@@ -794,6 +805,11 @@
         // Add active class to clicked tab and corresponding content
         btn.classList.add('active');
         document.getElementById(targetTab + '-tab').classList.add('active');
+        
+        // Auto-load content for specific tabs
+        if (targetTab === 'token-studio') {
+          loadTokenStudio();
+        }
       };
     });
 
@@ -865,6 +881,10 @@
 
     // Token Studio functionality
     const exportTokenStudioBtn = document.getElementById('export-token-studio-btn');
+    const tokenStudioOutput = document.getElementById('token-studio-output');
+    const copyTokenStudioBtn = document.getElementById('copy-token-studio-btn');
+    const downloadTokenStudioBtn = document.getElementById('download-token-studio-btn');
+    const tokenStudioStatus = document.getElementById('token-studio-status');
     
     exportTokenStudioBtn.onclick = () => {
       parent.postMessage({ 
@@ -873,6 +893,49 @@
           selectedCollections: Array.from(selectedCollections)
         } 
       }, '*');
+    };
+
+    // Auto-load Token Studio when tab is switched to
+    function loadTokenStudio() {
+      tokenStudioStatus.textContent = 'Loading Token Studio format...';
+      copyTokenStudioBtn.disabled = true;
+      downloadTokenStudioBtn.disabled = true;
+      
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-token-studio',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
+    }
+
+    // Copy functionality for Token Studio
+    copyTokenStudioBtn.onclick = () => {
+      tokenStudioOutput.select();
+      document.execCommand('copy');
+      tokenStudioStatus.textContent = 'Token Studio format copied to clipboard!';
+      setTimeout(() => {
+        tokenStudioStatus.textContent = 'Token Studio format ready';
+      }, 2000);
+    };
+
+    // Download functionality for Token Studio
+    downloadTokenStudioBtn.onclick = () => {
+      const data = tokenStudioOutput.value;
+      const filename = downloadTokenStudioBtn.getAttribute('data-filename') || 'tokens-studio.json';
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      tokenStudioStatus.textContent = 'Token Studio format downloaded!';
+      setTimeout(() => {
+        tokenStudioStatus.textContent = 'Token Studio format ready';
+      }, 2000);
     };
 
     // Function to render color palette
@@ -1294,6 +1357,7 @@
           downloadBtn.setAttribute('data-filename', message.filename || 'color-palette.json');
         }
       } else if (message.type === 'export-token-studio-complete') {
+        // Update main output area
         output.value = message.output;
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
@@ -1302,6 +1366,21 @@
         // Update download button with correct filename
         if (downloadBtn) {
           downloadBtn.setAttribute('data-filename', message.filename || 'tokens-studio.json');
+        }
+        
+        // Update Token Studio specific elements
+        if (tokenStudioOutput) {
+          tokenStudioOutput.value = message.output;
+        }
+        if (copyTokenStudioBtn) {
+          copyTokenStudioBtn.disabled = false;
+        }
+        if (downloadTokenStudioBtn) {
+          downloadTokenStudioBtn.disabled = false;
+          downloadTokenStudioBtn.setAttribute('data-filename', message.filename || 'tokens-studio.json');
+        }
+        if (tokenStudioStatus) {
+          tokenStudioStatus.textContent = 'Token Studio format ready';
         }
       }
     };
