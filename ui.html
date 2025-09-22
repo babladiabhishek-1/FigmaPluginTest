@@ -18,8 +18,8 @@
     /* Side Panel */
     #side-panel {
       width: 300px;
-      background-color: #fff;
-      border-right: 1px solid #e0e0e0;
+      background-color: #2c2c2c;
+      border-right: 1px solid #404040;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -28,10 +28,11 @@
     #side-panel h3 {
       margin: 0;
       padding: 16px;
-      background-color: #f8f9fa;
-      border-bottom: 1px solid #e0e0e0;
+      background-color: #1e1e1e;
+      border-bottom: 1px solid #404040;
       font-size: 14px;
       font-weight: 600;
+      color: #ffffff;
     }
 
     #variables-list {
@@ -40,36 +41,103 @@
       padding: 8px;
     }
 
-    .variable-item {
+    /* Category Styles */
+    .category {
+      margin-bottom: 8px;
+    }
+
+    .category-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       padding: 8px 12px;
-      margin: 4px 0;
-      background-color: #f8f9fa;
+      background-color: #3a3a3a;
       border-radius: 6px;
-      border: 1px solid #e9ecef;
       cursor: pointer;
       transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .category-header:hover {
+      background-color: #4a4a4a;
+    }
+
+    .category-header.active {
+      background-color: #007aff;
+    }
+
+    .category-name {
+      font-weight: 500;
+      font-size: 13px;
+      color: #ffffff;
+    }
+
+    .category-count {
+      font-size: 11px;
+      color: #999;
+      background-color: #555;
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+
+    .category-header.active .category-count {
+      background-color: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+    }
+
+    .category-toggle {
+      font-size: 12px;
+      color: #999;
+      transition: transform 0.2s ease;
+    }
+
+    .category-header.active .category-toggle {
+      transform: rotate(90deg);
+      color: #ffffff;
+    }
+
+    .category-items {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      margin-top: 4px;
+    }
+
+    .category-items.expanded {
+      max-height: 500px;
+    }
+
+    .variable-item {
+      padding: 8px 12px;
+      margin: 2px 0;
+      background-color: #2c2c2c;
+      border-radius: 4px;
+      border: 1px solid #404040;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-left: 12px;
     }
 
     .variable-item:hover {
-      background-color: #e9ecef;
+      background-color: #3a3a3a;
       border-color: #007aff;
     }
 
     .variable-item.selected {
-      background-color: #e3f2fd;
+      background-color: #1a3a5c;
       border-color: #007aff;
     }
 
     .variable-name {
       font-weight: 500;
-      font-size: 13px;
-      color: #111;
+      font-size: 12px;
+      color: #ffffff;
       margin-bottom: 2px;
     }
 
     .variable-meta {
-      font-size: 11px;
-      color: #666;
+      font-size: 10px;
+      color: #999;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -80,15 +148,22 @@
       color: white;
       padding: 2px 6px;
       border-radius: 3px;
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 500;
     }
 
     .variable-description {
-      font-size: 11px;
+      font-size: 10px;
       color: #888;
       margin-top: 4px;
       font-style: italic;
+    }
+
+    .loading {
+      color: #999;
+      font-size: 12px;
+      text-align: center;
+      padding: 20px;
     }
 
     /* Main Panel */
@@ -379,6 +454,9 @@
   <!-- Side Panel -->
   <div id="side-panel">
     <h3>Available Variables</h3>
+    <div id="search-container" style="padding: 8px; border-bottom: 1px solid #404040;">
+      <input type="text" id="search-input" placeholder="Search variables..." value="" style="width: 100%; padding: 6px 8px; border: 1px solid #555; border-radius: 4px; background-color: #2c2c2c; color: #ffffff; font-size: 11px;">
+    </div>
     <div id="variables-list">
       <div class="loading">Loading variables...</div>
     </div>
@@ -512,6 +590,10 @@
     const status = document.getElementById('status');
     const variablesList = document.getElementById('variables-list');
     const refreshBtn = document.getElementById('refresh-btn');
+    const searchInput = document.getElementById('search-input');
+
+    // Store original categorized variables for filtering
+    let originalCategorizedVariables = null;
 
     // GitHub elements
     const githubRepoInput = document.getElementById('github-repo');
@@ -526,7 +608,11 @@
     const githubStatusMessage = document.getElementById('github-status-message');
 
     // Load variables on startup
-    parent.postMessage({ pluginMessage: { type: 'get-variables' } }, '*');
+    console.log('Loading variables on startup...');
+    // Small delay to ensure UI is ready
+    setTimeout(() => {
+      parent.postMessage({ pluginMessage: { type: 'get-variables' } }, '*');
+    }, 100);
 
     // Initialize GitHub settings
     githubRepoInput.value = TEST_CREDENTIALS.repo;
@@ -590,6 +676,33 @@
     refreshBtn.onclick = () => {
       variablesList.innerHTML = '<div class="loading">Refreshing variables...</div>';
       parent.postMessage({ pluginMessage: { type: 'get-variables' } }, '*');
+    };
+
+    // Search functionality
+    searchInput.oninput = () => {
+      const searchTerm = searchInput.value.toLowerCase();
+      if (!originalCategorizedVariables) return;
+
+      if (searchTerm === '') {
+        renderVariables(originalCategorizedVariables);
+        return;
+      }
+
+      // Filter variables based on search term
+      const filteredVariables = {};
+      Object.entries(originalCategorizedVariables).forEach(([categoryName, variables]) => {
+        const filteredVars = variables.filter(variable => 
+          variable.name.toLowerCase().includes(searchTerm) ||
+          variable.type.toLowerCase().includes(searchTerm) ||
+          variable.collection.toLowerCase().includes(searchTerm) ||
+          (variable.description && variable.description.toLowerCase().includes(searchTerm))
+        );
+        if (filteredVars.length > 0) {
+          filteredVariables[categoryName] = filteredVars;
+        }
+      });
+
+      renderVariables(filteredVariables);
     };
 
     // Copy to clipboard
@@ -704,23 +817,96 @@
       githubStatus.className = `github-status ${type}`;
     }
 
-    // Render variables list
-    function renderVariables(variables) {
-      if (variables.length === 0) {
+    // Render categorized variables list
+    function renderVariables(categorizedVariables) {
+      console.log('Rendering variables:', categorizedVariables);
+      
+      // Check if we received an array instead of categorized object
+      if (Array.isArray(categorizedVariables)) {
+        console.log('Received array instead of categorized object, creating fallback structure');
+        // Create a fallback structure with all variables in "All Variables" category
+        categorizedVariables = {
+          'All Variables': categorizedVariables
+        };
+      }
+      
+      // Store original data for search functionality
+      if (categorizedVariables && Object.keys(categorizedVariables).length > 0) {
+        originalCategorizedVariables = JSON.parse(JSON.stringify(categorizedVariables));
+      }
+
+      if (!categorizedVariables || Object.keys(categorizedVariables).length === 0) {
+        console.log('No variables to render');
         variablesList.innerHTML = '<div class="loading">No variables found in this file.</div>';
         return;
       }
 
-      variablesList.innerHTML = variables.map(variable => `
-        <div class="variable-item" data-id="${variable.id}">
-          <div class="variable-name">${variable.name}</div>
-          <div class="variable-meta">
-            <span>${variable.collection}</span>
-            <span class="variable-type">${variable.type}</span>
-          </div>
-          ${variable.description ? `<div class="variable-description">${variable.description}</div>` : ''}
-        </div>
-      `).join('');
+      let hasVariables = false;
+      let html = '';
+
+      // Sort collections alphabetically and render each category
+      const sortedCollections = Object.keys(categorizedVariables).sort();
+      sortedCollections.forEach(categoryName => {
+        const variables = categorizedVariables[categoryName];
+        if (variables.length > 0) {
+          hasVariables = true;
+          html += `
+            <div class="category">
+              <div class="category-header" data-category="${categoryName}">
+                <span class="category-name">${categoryName}</span>
+                <span class="category-count">${variables.length}</span>
+                <span class="category-toggle">▶</span>
+              </div>
+              <div class="category-items">
+                ${variables.map(variable => `
+                  <div class="variable-item" data-id="${variable.id}">
+                    <div class="variable-name">${variable.name}</div>
+                    <div class="variable-meta">
+                      <span class="variable-type">${variable.type}</span>
+                    </div>
+                    ${variable.description ? `<div class="variable-description">${variable.description}</div>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+      });
+
+      if (!hasVariables) {
+        variablesList.innerHTML = '<div class="loading">No variables found in this file.</div>';
+        return;
+      }
+
+      variablesList.innerHTML = html;
+
+      // Add click handlers for category headers
+      document.querySelectorAll('.category-header').forEach(header => {
+        const categoryName = header.getAttribute('data-category');
+        
+        // Start with all categories collapsed by default
+        const categoryItems = header.nextElementSibling;
+        categoryItems.classList.remove('expanded');
+        header.classList.remove('active');
+        header.querySelector('.category-toggle').textContent = '▶';
+        
+        // Enable toggle functionality
+        header.onclick = () => {
+          const categoryItems = header.nextElementSibling;
+          const isExpanded = categoryItems.classList.contains('expanded');
+          
+          // Toggle the category
+          if (isExpanded) {
+            categoryItems.classList.remove('expanded');
+            header.classList.remove('active');
+            header.querySelector('.category-toggle').textContent = '▶';
+          } else {
+            categoryItems.classList.add('expanded');
+            header.classList.add('active');
+            header.querySelector('.category-toggle').textContent = '▼';
+          }
+        };
+      });
 
       // Add click handlers for variable items
       document.querySelectorAll('.variable-item').forEach(item => {
@@ -733,8 +919,22 @@
       });
     }
 
+    // Function to categorize variables by collection
+    function categorizeVariables(variables) {
+      const categorized = {};
+      variables.forEach(v => {
+        const category = v.collection || "Uncategorized";
+        if (!categorized[category]) {
+          categorized[category] = [];
+        }
+        categorized[category].push(v);
+      });
+      return categorized;
+    }
+
     window.onmessage = event => {
       const message = event.data.pluginMessage;
+      console.log('Received message:', message);
       if (message.type === 'export-complete') {
         output.value = message.jsonString;
         copyBtn.disabled = false;
@@ -762,7 +962,18 @@
           showGitHubStatus('❌ ' + message.result.message, 'error');
         }
       } else if (message.type === 'variables-loaded') {
-        renderVariables(message.variables);
+        console.log('Variables loaded message received:', message.variables);
+        console.log('Type of variables:', typeof message.variables);
+        console.log('Is array?', Array.isArray(message.variables));
+        console.log('Keys:', Object.keys(message.variables || {}));
+        
+        let vars = message.variables;
+        if (Array.isArray(vars)) {
+          console.log('Converting array to categorized object...');
+          vars = categorizeVariables(vars);
+          console.log('Categorized variables:', vars);
+        }
+        renderVariables(vars);
       } else if (message.type === 'export-error') {
         output.value = `Error: ${message.message}`;
         copyBtn.disabled = true;
