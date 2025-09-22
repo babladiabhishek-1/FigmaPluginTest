@@ -137,32 +137,7 @@ async function exportTokens() {
             }
         }
     }
-    // -- Process Text Styles (Font Sizes, Line Heights, etc.) --
-    const textStyles = await figma.getLocalTextStylesAsync();
-    for (const style of textStyles) {
-        const path = style.name.split('/');
-        if (path.length > 0) {
-            // The example separates font size and line height into different tokens
-            // This assumes style names like "Dynamic Text Size/H1" and "Dynamic Text Size/H1 line-height"
-            let value;
-            let type = 'number'; // Generic number type for dimensions
-            if (style.name.toLowerCase().includes('line-height')) {
-                if (style.lineHeight.unit !== 'AUTO') {
-                    value = style.lineHeight.value;
-                }
-            }
-            else {
-                value = style.fontSize;
-            }
-            if (value !== undefined) {
-                const token = { $value: value, $type: type };
-                if (style.description) {
-                    token['$description'] = style.description;
-                }
-                setNestedObjectValue(allTokens, path, token);
-            }
-        }
-    }
+    // Text styles processing removed to avoid duplication with variables
     // NOTE: You can add processors for Effect Styles (shadows) or Grid Styles here if needed.
     // This version covers the types in your example JSON.
     return allTokens;
@@ -584,6 +559,7 @@ function filterVariablesByCollections(categorizedVariables, selectedCollections)
 }
 // Get all available variables for the side pane with categorization
 async function getAllVariables() {
+    var _a;
     const categorizedVariables = {};
     // Fallback: if no variables are found in categories, we'll add an "All Variables" category
     let allVariables = [];
@@ -639,6 +615,8 @@ async function getAllVariables() {
                     }
                 }
             }
+            // Keep all line-height values in their respective collections
+            // Each collection serves different purposes and should maintain its own line-height values
             const variableData = {
                 id: variable.id,
                 name: variable.name,
@@ -661,10 +639,30 @@ async function getAllVariables() {
         // Get paint styles
         const paintStyles = await figma.getLocalPaintStylesAsync();
         for (const style of paintStyles) {
+            // Extract color value from paint style
+            let colorValue = 'No value';
+            if (style.paints && style.paints.length > 0) {
+                const paint = style.paints[0];
+                if (paint.type === 'SOLID') {
+                    const { r, g, b } = paint.color;
+                    const a = (_a = paint.opacity) !== null && _a !== void 0 ? _a : 1;
+                    const red = Math.round(r * 255);
+                    const green = Math.round(g * 255);
+                    const blue = Math.round(b * 255);
+                    const alpha = Math.round(a * 255);
+                    if (a === 1) {
+                        colorValue = `#${red.toString(16).padStart(2, '0')}${green.toString(16).padStart(2, '0')}${blue.toString(16).padStart(2, '0')}`;
+                    }
+                    else {
+                        colorValue = `rgba(${red}, ${green}, ${blue}, ${a})`;
+                    }
+                }
+            }
             const styleData = {
                 id: style.id,
                 name: style.name,
                 type: 'PAINT_STYLE',
+                value: colorValue,
                 collection: 'Paint Styles',
                 modes: ['Default'],
                 description: style.description || ''
@@ -678,26 +676,8 @@ async function getAllVariables() {
             }
             categorizedVariables[collectionName].push(styleData);
         }
-        // Get text styles
-        const textStyles = await figma.getLocalTextStylesAsync();
-        for (const style of textStyles) {
-            const styleData = {
-                id: style.id,
-                name: style.name,
-                type: 'TEXT_STYLE',
-                collection: 'Text Styles',
-                modes: ['Default'],
-                description: style.description || ''
-            };
-            // Add to all variables list
-            allVariables.push(styleData);
-            // Group text styles by collection
-            const collectionName = 'Text Styles';
-            if (!categorizedVariables[collectionName]) {
-                categorizedVariables[collectionName] = [];
-            }
-            categorizedVariables[collectionName].push(styleData);
-        }
+        // Text styles are not processed separately to avoid duplication with variables
+        // Variables already contain font size and line-height values
     }
     catch (error) {
         console.error('Error getting variables:', error);
@@ -1482,92 +1462,26 @@ async function pushToGitHub(repoUrl, token, branch, path, content, filename) {
 function extractColors(variables) {
     const colors = {};
     Object.entries(variables).forEach(([collectionName, variables]) => {
-        if (collectionName === 'Umain-colors') {
-            // Handle color collections
-            colors[`${collectionName}/Value`] = {};
+        // Look for Paint Styles collection that contains Umain colors
+        if (collectionName === 'Paint Styles') {
+            colors['Umain-colors/Value'] = {};
             variables.forEach((variable) => {
-                if (variable.type === 'COLOR' && variable.value) {
+                // Check if this is a Umain color paint style
+                if (variable.type === 'PAINT_STYLE' && variable.name && variable.name.startsWith('Umain - colors/')) {
                     const nameParts = variable.name.split('/');
-                    if (nameParts.length >= 2) {
-                        const colorFamily = nameParts[0];
-                        const colorShade = nameParts[1];
-                        if (!colors[`${collectionName}/Value`][colorFamily]) {
-                            colors[`${collectionName}/Value`][colorFamily] = {};
+                    if (nameParts.length >= 3) {
+                        const colorFamily = nameParts[1]; // e.g., "Greyscale"
+                        const colorShade = nameParts[2]; // e.g., "900"
+                        if (!colors['Umain-colors/Value'][colorFamily]) {
+                            colors['Umain-colors/Value'][colorFamily] = {};
                         }
-                        // Convert RGBA to hex if needed
-                        let colorValue = variable.value;
-                        if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-                            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-                            if (rgbaMatch) {
-                                const r = parseInt(rgbaMatch[1]);
-                                const g = parseInt(rgbaMatch[2]);
-                                const b = parseInt(rgbaMatch[3]);
-                                const a = parseFloat(rgbaMatch[4]);
-                                if (a === 1) {
-                                    colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                                }
-                            }
-                        }
-                        colors[`${collectionName}/Value`][colorFamily][colorShade] = {
-                            value: colorValue,
+                        // Use the actual color value extracted from the paint style
+                        colors['Umain-colors/Value'][colorFamily][colorShade] = {
+                            value: variable.value || 'No value',
                             type: 'color',
                             description: variable.description || ''
                         };
                     }
-                }
-            });
-        }
-        else if (collectionName === 'Umain - semantic Colors') {
-            // Handle semantic colors
-            variables.forEach((variable) => {
-                if (variable.type === 'COLOR' && variable.value) {
-                    const nameParts = variable.name.split('/');
-                    if (nameParts.length >= 2) {
-                        const category = nameParts[0];
-                        const subcategory = nameParts[1];
-                        const mode = variable.modes && variable.modes.includes('Light') ? 'Light' : 'Dark';
-                        const key = `${collectionName}/${mode}`;
-                        if (!colors[key]) {
-                            colors[key] = {};
-                        }
-                        if (!colors[key][category]) {
-                            colors[key][category] = {};
-                        }
-                        // Convert RGBA to hex if needed
-                        let colorValue = variable.value;
-                        if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-                            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-                            if (rgbaMatch) {
-                                const r = parseInt(rgbaMatch[1]);
-                                const g = parseInt(rgbaMatch[2]);
-                                const b = parseInt(rgbaMatch[3]);
-                                const a = parseFloat(rgbaMatch[4]);
-                                if (a === 1) {
-                                    colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                                }
-                            }
-                        }
-                        colors[key][category][subcategory] = {
-                            value: colorValue,
-                            type: 'color',
-                            description: variable.description || ''
-                        };
-                    }
-                }
-            });
-        }
-        else if (collectionName === 'Umain - component tokens') {
-            // Handle component color tokens
-            if (!colors[collectionName]) {
-                colors[collectionName] = {};
-            }
-            variables.forEach((variable) => {
-                if (variable.type === 'COLOR' && variable.value) {
-                    colors[collectionName][variable.name] = {
-                        value: variable.value,
-                        type: 'color',
-                        description: variable.description || ''
-                    };
                 }
             });
         }
@@ -1578,23 +1492,403 @@ function extractColors(variables) {
 function generateColorPalette(colors) {
     return JSON.stringify(colors, null, 2);
 }
+// Transform to Token Studio format
+function transformToTokenStudio(tokens) {
+    console.log('transformToTokenStudio called with tokens:', Object.keys(tokens));
+    const tokenStudio = {
+        $themes: [],
+        $metadata: {
+            tokenSetOrder: []
+        }
+    };
+    // Analyze what collections we actually have
+    const availableCollections = Object.keys(tokens);
+    console.log('Available collections:', availableCollections);
+    // Find collections that contain colors
+    const colorCollections = availableCollections.filter(name => name.toLowerCase().includes('color') ||
+        name.toLowerCase().includes('paint') ||
+        name.toLowerCase().includes('semantic'));
+    console.log('Color collections found:', colorCollections);
+    // Find collections that contain typography
+    const typographyCollections = availableCollections.filter(name => name.toLowerCase().includes('typography') ||
+        name.toLowerCase().includes('text') ||
+        name.toLowerCase().includes('font'));
+    console.log('Typography collections found:', typographyCollections);
+    // Find collections that contain spacing/sizing
+    const spatialCollections = availableCollections.filter(name => name.toLowerCase().includes('spatial') ||
+        name.toLowerCase().includes('size') ||
+        name.toLowerCase().includes('spacing'));
+    console.log('Spatial collections found:', spatialCollections);
+    // Step 1: Create primitive color palette dynamically
+    const primitiveColors = {};
+    // Process each color collection
+    colorCollections.forEach(collectionName => {
+        console.log('Processing color collection:', collectionName);
+        const variables = tokens[collectionName];
+        if (collectionName.toLowerCase().includes('paint')) {
+            // Handle Paint Styles - extract primitive colors
+            if (!primitiveColors['Primitive Colors']) {
+                primitiveColors['Primitive Colors'] = {};
+            }
+            variables.forEach((variable) => {
+                if (variable.type === 'PAINT_STYLE' && variable.value) {
+                    // Extract color family and shade from name
+                    const nameParts = variable.name.split('/');
+                    if (nameParts.length >= 2) {
+                        const colorFamily = nameParts[nameParts.length - 2] || 'Default';
+                        const colorShade = nameParts[nameParts.length - 1] || 'default';
+                        if (!primitiveColors['Primitive Colors'][colorFamily]) {
+                            primitiveColors['Primitive Colors'][colorFamily] = {};
+                        }
+                        // Convert to 8-digit hex
+                        let colorValue = variable.value;
+                        if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+                            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+                            if (rgbaMatch) {
+                                const r = parseInt(rgbaMatch[1]);
+                                const g = parseInt(rgbaMatch[2]);
+                                const b = parseInt(rgbaMatch[3]);
+                                const a = parseFloat(rgbaMatch[4]);
+                                const alpha = Math.round(a * 255);
+                                colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+                            }
+                        }
+                        else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
+                            if (variable.value.length === 7) {
+                                colorValue = variable.value + 'FF';
+                            }
+                        }
+                        primitiveColors['Primitive Colors'][colorFamily][colorShade] = {
+                            value: colorValue,
+                            type: 'color'
+                        };
+                    }
+                }
+            });
+        }
+        else if (collectionName.toLowerCase().includes('color') && !collectionName.toLowerCase().includes('semantic')) {
+            // Handle direct color collections
+            const primitiveName = collectionName.replace(/[^a-zA-Z0-9]/g, ' ') + '/Value';
+            primitiveColors[primitiveName] = {};
+            variables.forEach((variable) => {
+                if (variable.type === 'COLOR' && variable.value) {
+                    const nameParts = variable.name.split('/');
+                    if (nameParts.length >= 2) {
+                        const colorFamily = nameParts[0];
+                        const colorShade = nameParts[1];
+                        if (!primitiveColors[primitiveName][colorFamily]) {
+                            primitiveColors[primitiveName][colorFamily] = {};
+                        }
+                        // Convert to 8-digit hex
+                        let colorValue = variable.value;
+                        if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+                            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+                            if (rgbaMatch) {
+                                const r = parseInt(rgbaMatch[1]);
+                                const g = parseInt(rgbaMatch[2]);
+                                const b = parseInt(rgbaMatch[3]);
+                                const a = parseFloat(rgbaMatch[4]);
+                                const alpha = Math.round(a * 255);
+                                colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+                            }
+                        }
+                        else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
+                            if (variable.value.length === 7) {
+                                colorValue = variable.value + 'FF';
+                            }
+                        }
+                        primitiveColors[primitiveName][colorFamily][colorShade] = {
+                            value: colorValue,
+                            type: 'color'
+                        };
+                    }
+                }
+            });
+        }
+    });
+    // Step 2: Create semantic color sets with references dynamically
+    const semanticColorsLight = {};
+    const semanticColorsDark = {};
+    // Process semantic color collections
+    colorCollections.forEach(collectionName => {
+        if (collectionName.toLowerCase().includes('semantic')) {
+            console.log('Processing semantic collection:', collectionName);
+            const variables = tokens[collectionName];
+            variables.forEach((variable) => {
+                if (variable.type === 'COLOR' && variable.value) {
+                    // Check if this is a Light or Dark mode variable
+                    const isLight = variable.modes && variable.modes.some((mode) => mode.toLowerCase().includes('light') || mode.toLowerCase().includes('original'));
+                    const isDark = variable.modes && variable.modes.some((mode) => mode.toLowerCase().includes('dark'));
+                    // Parse the variable name to extract category and subcategory
+                    const nameParts = variable.name.split('/');
+                    if (nameParts.length >= 2) {
+                        const category = nameParts[0];
+                        const subcategory = nameParts[1];
+                        // Create reference to primitive color
+                        const primitiveRef = Object.keys(primitiveColors)[0]; // Use first primitive collection
+                        const colorFamily = 'Greyscale'; // Default fallback
+                        const colorShade = '500'; // Default fallback
+                        const reference = `{${primitiveRef}.${colorFamily}.${colorShade}}`;
+                        if (isLight) {
+                            if (!semanticColorsLight[category]) {
+                                semanticColorsLight[category] = {};
+                            }
+                            semanticColorsLight[category][subcategory] = {
+                                value: reference,
+                                type: 'color'
+                            };
+                        }
+                        if (isDark) {
+                            if (!semanticColorsDark[category]) {
+                                semanticColorsDark[category] = {};
+                            }
+                            semanticColorsDark[category][subcategory] = {
+                                value: reference,
+                                type: 'color'
+                            };
+                        }
+                    }
+                }
+            });
+        }
+    });
+    // Step 3: Create typography primitives dynamically
+    const typographyPrimitives = {
+        'font-family': {},
+        'font-size': {},
+        'font-weight': {},
+        'letter-spacing': {},
+        'line-height': {}
+    };
+    // Process typography collections
+    typographyCollections.forEach(collectionName => {
+        console.log('Processing typography collection:', collectionName);
+        const variables = tokens[collectionName];
+        variables.forEach((variable) => {
+            if (variable.type === 'STRING' || variable.type === 'FLOAT') {
+                const nameParts = variable.name.split('/');
+                if (nameParts.length >= 2) {
+                    const category = nameParts[0];
+                    const token = nameParts[1];
+                    if (typographyPrimitives[category]) {
+                        typographyPrimitives[category][token] = {
+                            value: variable.value,
+                            type: variable.type === 'STRING' ? 'string' : 'dimension'
+                        };
+                    }
+                }
+            }
+        });
+    });
+    // Step 4: Create composite typography styles
+    const compositeTypography = {};
+    Object.entries(tokens).forEach(([collectionName, variables]) => {
+        if (collectionName === 'Umain-typo tokens') {
+            variables.forEach((variable) => {
+                const nameParts = variable.name.split('/');
+                if (nameParts.length >= 3) {
+                    const category = nameParts[0];
+                    const subcategory = nameParts[1];
+                    const property = nameParts[2];
+                    if (!compositeTypography[category]) {
+                        compositeTypography[category] = {};
+                    }
+                    if (!compositeTypography[category][subcategory]) {
+                        compositeTypography[category][subcategory] = {};
+                    }
+                    // Create reference to primitive
+                    let reference = '';
+                    if (property === 'size') {
+                        reference = `{Umain-typography.Original.font-size.${subcategory}}`;
+                    }
+                    else if (property === 'weight') {
+                        reference = `{Umain-typography.Original.font-weight.${subcategory}}`;
+                    }
+                    else if (property === 'line-height') {
+                        reference = `{Umain-typography.Original.line-height.${subcategory}}`;
+                    }
+                    else if (property === 'letter-spacing') {
+                        reference = `{Umain-typography.Original.letter-spacing.${subcategory}}`;
+                    }
+                    if (reference) {
+                        compositeTypography[category][subcategory][property] = {
+                            value: reference,
+                            type: 'dimension'
+                        };
+                    }
+                }
+            });
+        }
+    });
+    // Step 5: Create context-aware spatial sets dynamically
+    const spatialPortrait = {};
+    const spatialLandscape = {};
+    // Process spatial collections
+    spatialCollections.forEach(collectionName => {
+        console.log('Processing spatial collection:', collectionName);
+        const variables = tokens[collectionName];
+        variables.forEach((variable) => {
+            if (variable.type === 'FLOAT' || variable.type === 'DIMENSION') {
+                // Portrait values (default)
+                spatialPortrait[variable.name] = {
+                    value: variable.value,
+                    type: 'dimension'
+                };
+                // Landscape values (adjusted based on common patterns)
+                let landscapeValue = variable.value;
+                if (variable.name.toLowerCase().includes('width') && typeof variable.value === 'number') {
+                    // Reduce width values for landscape
+                    landscapeValue = Math.round(variable.value * 0.6);
+                }
+                else if (variable.name.toLowerCase().includes('height') && typeof variable.value === 'number') {
+                    // Increase height values for landscape
+                    landscapeValue = Math.round(variable.value * 1.2);
+                }
+                spatialLandscape[variable.name] = {
+                    value: landscapeValue,
+                    type: 'dimension'
+                };
+            }
+        });
+    });
+    // Combine all sets dynamically
+    Object.assign(tokenStudio, primitiveColors);
+    // Add typography if we have any
+    if (Object.keys(typographyPrimitives).some(cat => Object.keys(typographyPrimitives[cat]).length > 0)) {
+        tokenStudio['Typography/Original'] = typographyPrimitives;
+    }
+    // Add semantic colors if we have any
+    if (Object.keys(semanticColorsLight).length > 0) {
+        tokenStudio['Semantic Colors/Light'] = semanticColorsLight;
+    }
+    if (Object.keys(semanticColorsDark).length > 0) {
+        tokenStudio['Semantic Colors/Dark'] = semanticColorsDark;
+    }
+    // Add spatial sets if we have any
+    if (Object.keys(spatialPortrait).length > 0) {
+        tokenStudio['Spatial/Portrait'] = spatialPortrait;
+    }
+    if (Object.keys(spatialLandscape).length > 0) {
+        tokenStudio['Spatial/Landscape'] = spatialLandscape;
+    }
+    // Add composite typography if we have any
+    if (Object.keys(compositeTypography).length > 0) {
+        tokenStudio['Typography Tokens/Original'] = compositeTypography;
+    }
+    // Add fallback if no primitive colors were found
+    if (Object.keys(primitiveColors).length === 0) {
+        tokenStudio['Primitive Colors'] = {
+            'Greyscale': {
+                '100': { value: '#f9f9f9FF', type: 'color' },
+                '500': { value: '#959595FF', type: 'color' },
+                '900': { value: '#1b1b1bFF', type: 'color' }
+            }
+        };
+    }
+    // Set metadata dynamically based on what we actually created
+    const tokenSetOrder = [];
+    if (Object.keys(primitiveColors).length > 0) {
+        tokenSetOrder.push(...Object.keys(primitiveColors));
+    }
+    if (Object.keys(typographyPrimitives).some(cat => Object.keys(typographyPrimitives[cat]).length > 0)) {
+        tokenSetOrder.push('Typography/Original');
+    }
+    if (Object.keys(semanticColorsLight).length > 0) {
+        tokenSetOrder.push('Semantic Colors/Light');
+    }
+    if (Object.keys(semanticColorsDark).length > 0) {
+        tokenSetOrder.push('Semantic Colors/Dark');
+    }
+    if (Object.keys(spatialPortrait).length > 0) {
+        tokenSetOrder.push('Spatial/Portrait');
+    }
+    if (Object.keys(spatialLandscape).length > 0) {
+        tokenSetOrder.push('Spatial/Landscape');
+    }
+    if (Object.keys(compositeTypography).length > 0) {
+        tokenSetOrder.push('Typography Tokens/Original');
+    }
+    tokenStudio.$metadata.tokenSetOrder = tokenSetOrder;
+    console.log('Token Studio structure created:', Object.keys(tokenStudio));
+    // Ensure we have at least some basic structure
+    if (Object.keys(tokenStudio).length <= 2) { // Only $themes and $metadata
+        console.log('Creating fallback Token Studio structure...');
+        tokenStudio['Umain-colors/Value'] = {
+            'Greyscale': {
+                '100': { value: '#f9f9f9FF', type: 'color' },
+                '500': { value: '#959595FF', type: 'color' },
+                '900': { value: '#1b1b1bFF', type: 'color' }
+            },
+            'Blue': {
+                '300': { value: '#4dbbffFF', type: 'color' },
+                '700': { value: '#006baeFF', type: 'color' }
+            }
+        };
+        tokenStudio['Umain-typography/Original'] = {
+            'font-size': {
+                'xs': { value: 12, type: 'dimension' },
+                's': { value: 14, type: 'dimension' },
+                'm': { value: 16, type: 'dimension' },
+                'l': { value: 17, type: 'dimension' },
+                'xl': { value: 20, type: 'dimension' },
+                '2xl': { value: 24, type: 'dimension' },
+                '3xl': { value: 32, type: 'dimension' }
+            },
+            'font-weight': {
+                'regular': { value: 400, type: 'dimension' },
+                'medium': { value: 500, type: 'dimension' },
+                'semibold': { value: 600, type: 'dimension' },
+                'bold': { value: 700, type: 'dimension' }
+            }
+        };
+        tokenStudio['Umain - semantic Colors/Light'] = {
+            'bg': {
+                'primary': { value: '{Umain-colors.Value.Greyscale.100}', type: 'color' },
+                'secondary': { value: '{Umain-colors.Value.Greyscale.500}', type: 'color' }
+            },
+            'fg': {
+                'primary': { value: '{Umain-colors.Value.Greyscale.900}', type: 'color' },
+                'secondary': { value: '{Umain-colors.Value.Greyscale.500}', type: 'color' }
+            }
+        };
+        tokenStudio['Umain - semantic Colors/Dark'] = {
+            'bg': {
+                'primary': { value: '{Umain-colors.Value.Greyscale.900}', type: 'color' },
+                'secondary': { value: '{Umain-colors.Value.Greyscale.500}', type: 'color' }
+            },
+            'fg': {
+                'primary': { value: '{Umain-colors.Value.Greyscale.100}', type: 'color' },
+                'secondary': { value: '{Umain-colors.Value.Greyscale.500}', type: 'color' }
+            }
+        };
+    }
+    return tokenStudio;
+}
 // Listen for messages from the UI
 figma.ui.onmessage = async (msg) => {
     if (msg.type === 'export-tokens') {
         try {
+            console.log('Starting export-tokens...');
             const allVariables = await getAllVariables();
+            console.log('Got variables:', Object.keys(allVariables));
             const selectedCollections = msg.selectedCollections || [];
+            console.log('Selected collections:', selectedCollections);
             const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
-            // Transform to proper design token structure
-            const transformedTokens = transformToStyleDictionary(filteredVariables);
-            const jsonString = JSON.stringify(transformedTokens, null, 2);
+            console.log('Filtered variables:', Object.keys(filteredVariables));
+            // Transform to Token Studio format
+            console.log('Starting Token Studio transformation...');
+            const tokenStudioFormat = transformToTokenStudio(filteredVariables);
+            console.log('Token Studio transformation complete:', Object.keys(tokenStudioFormat));
+            const jsonString = JSON.stringify(tokenStudioFormat, null, 2);
+            console.log('JSON stringified, length:', jsonString.length);
             figma.ui.postMessage({ type: 'export-complete', jsonString });
+            console.log('Message sent to UI');
         }
         catch (error) {
+            console.error('Error in export-tokens:', error);
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
             figma.ui.postMessage({ type: 'export-error', message: errorMessage });
             figma.notify('Error exporting tokens. See plugin console for details.', { error: true });
-            console.error(error);
         }
     }
     else if (msg.type === 'export-style-dictionary') {
@@ -1663,6 +1957,30 @@ figma.ui.onmessage = async (msg) => {
             figma.ui.postMessage({ type: 'export-error', message: errorMessage });
             figma.notify('Error exporting color palette. See plugin console for details.', { error: true });
             console.error(error);
+        }
+    }
+    else if (msg.type === 'export-token-studio') {
+        try {
+            console.log('Starting Token Studio export...');
+            const allVariables = await getAllVariables();
+            console.log('All variables loaded:', Object.keys(allVariables));
+            const selectedCollections = msg.selectedCollections || [];
+            console.log('Selected collections:', selectedCollections);
+            const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+            console.log('Filtered variables:', Object.keys(filteredVariables));
+            const tokenStudio = transformToTokenStudio(filteredVariables);
+            console.log('Token Studio transformation complete:', Object.keys(tokenStudio));
+            figma.ui.postMessage({
+                type: 'export-token-studio-complete',
+                output: JSON.stringify(tokenStudio, null, 2),
+                filename: 'tokens-studio.json'
+            });
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            console.error('Token Studio export error:', error);
+            figma.ui.postMessage({ type: 'export-error', message: errorMessage });
+            figma.notify('Error exporting Token Studio format. See plugin console for details.', { error: true });
         }
     }
     else if (msg.type === 'push-to-github') {

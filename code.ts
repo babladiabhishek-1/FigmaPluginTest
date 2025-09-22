@@ -2113,7 +2113,22 @@ figma.ui.onmessage = async (msg) => {
       
       // Transform to Token Studio format
       console.log('Starting Token Studio transformation...');
-      const tokenStudioFormat = transformToTokenStudio(filteredVariables);
+      
+      // Add timeout to prevent hanging
+      const transformPromise = new Promise((resolve, reject) => {
+        try {
+          const result = transformToTokenStudio(filteredVariables);
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Token Studio transformation timed out after 10 seconds')), 10000);
+      });
+      
+      const tokenStudioFormat = await Promise.race([transformPromise, timeoutPromise]);
       console.log('Token Studio transformation complete:', Object.keys(tokenStudioFormat));
       
       const jsonString = JSON.stringify(tokenStudioFormat, null, 2);
