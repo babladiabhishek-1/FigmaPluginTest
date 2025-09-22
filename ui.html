@@ -603,6 +603,7 @@
       <button class="tab-btn" data-tab="dtcg">Style Dictionary</button>
       <button class="tab-btn" data-tab="tailwind">Tailwind</button>
       <button class="tab-btn" data-tab="colors">Check Colors</button>
+      <button class="tab-btn" data-tab="token-studio">Token Studio</button>
       <button class="tab-btn" data-tab="github">GitHub</button>
     </div>
 
@@ -657,6 +658,14 @@
         <div class="export-actions">
           <button id="refresh-colors-btn" class="btn btn-secondary">Refresh Colors</button>
           <button id="export-colors-btn" class="btn btn-primary">Export Color Palette</button>
+        </div>
+      </div>
+
+      <!-- Token Studio Tab -->
+      <div id="token-studio-tab" class="tab-content">
+        <div class="format-info">Token Studio format with references, context-aware tokens, and proper metadata</div>
+        <div class="export-actions">
+          <button id="export-token-studio-btn" class="btn btn-primary">Export Token Studio</button>
         </div>
       </div>
 
@@ -849,6 +858,18 @@
       parent.postMessage({ 
         pluginMessage: { 
           type: 'export-colors',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
+    };
+
+    // Token Studio functionality
+    const exportTokenStudioBtn = document.getElementById('export-token-studio-btn');
+    
+    exportTokenStudioBtn.onclick = () => {
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-token-studio',
           selectedCollections: Array.from(selectedCollections)
         } 
       }, '*');
@@ -1271,6 +1292,16 @@
         // Update download button with correct filename
         if (downloadBtn) {
           downloadBtn.setAttribute('data-filename', message.filename || 'color-palette.json');
+        }
+      } else if (message.type === 'export-token-studio-complete') {
+        output.value = message.output;
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
+        status.textContent = 'Token Studio format exported successfully!';
+        
+        // Update download button with correct filename
+        if (downloadBtn) {
+          downloadBtn.setAttribute('data-filename', message.filename || 'tokens-studio.json');
         }
       }
     };

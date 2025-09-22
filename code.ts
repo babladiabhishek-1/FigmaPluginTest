@@ -1669,6 +1669,268 @@ function generateColorPalette(colors: any): string {
   return JSON.stringify(colors, null, 2);
 }
 
+// Transform to Token Studio format
+function transformToTokenStudio(tokens: any): any {
+  const tokenStudio: any = {
+    $themes: [],
+    $metadata: {
+      tokenSetOrder: []
+    }
+  };
+
+  // Step 1: Create primitive color palette
+  const primitiveColors: any = {};
+  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
+    if (collectionName === 'Umain-colors/Value') {
+      primitiveColors[collectionName] = {};
+      
+      (variables as any[]).forEach((variable: any) => {
+        const nameParts = variable.name.split('/');
+        if (nameParts.length >= 2) {
+          const colorFamily = nameParts[0];
+          const colorShade = nameParts[1];
+          
+          if (!primitiveColors[collectionName][colorFamily]) {
+            primitiveColors[collectionName][colorFamily] = {};
+          }
+          
+          // Convert rgba to 8-digit hex format
+          let colorValue = variable.value;
+          if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+            if (rgbaMatch) {
+              const r = parseInt(rgbaMatch[1]);
+              const g = parseInt(rgbaMatch[2]);
+              const b = parseInt(rgbaMatch[3]);
+              const a = parseFloat(rgbaMatch[4]);
+              
+              // Convert to 8-digit hex
+              const alpha = Math.round(a * 255);
+              colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+            }
+          } else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
+            // Convert 6-digit hex to 8-digit hex (add FF for full opacity)
+            if (variable.value.length === 7) {
+              colorValue = variable.value + 'FF';
+            }
+          }
+          
+          primitiveColors[collectionName][colorFamily][colorShade] = {
+            value: colorValue,
+            type: 'color'
+          };
+        }
+      });
+    }
+  });
+
+  // Step 2: Create semantic color sets with references
+  const semanticColorsLight: any = {};
+  const semanticColorsDark: any = {};
+  
+  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
+    if (collectionName === 'Paint Styles') {
+      (variables as any[]).forEach((variable: any) => {
+        if (variable.name.startsWith('light/')) {
+          const path = variable.name.replace('light/', '').split('/');
+          if (path.length >= 2) {
+            const category = path[0];
+            const subcategory = path[1];
+            
+            if (!semanticColorsLight[category]) {
+              semanticColorsLight[category] = {};
+            }
+            
+            // Map to primitive color references
+            let reference = '';
+            if (variable.name.includes('brand')) {
+              reference = '{Umain-colors.Value.Gold.400}';
+            } else if (variable.name.includes('primary')) {
+              reference = '{Umain-colors.Value.Greyscale.900}';
+            } else if (variable.name.includes('secondary')) {
+              reference = '{Umain-colors.Value.Greyscale.700}';
+            } else if (variable.name.includes('accent')) {
+              reference = '{Umain-colors.Value.Gold.400}';
+            } else if (variable.name.includes('error')) {
+              reference = '{Umain-colors.Value.Red.400}';
+            } else if (variable.name.includes('success')) {
+              reference = '{Umain-colors.Value.Green.400}';
+            } else if (variable.name.includes('warning')) {
+              reference = '{Umain-colors.Value.Orange.400}';
+            } else {
+              reference = '{Umain-colors.Value.Greyscale.500}'; // fallback
+            }
+            
+            semanticColorsLight[category][subcategory] = {
+              value: reference,
+              type: 'color'
+            };
+          }
+        } else if (variable.name.startsWith('dark/')) {
+          const path = variable.name.replace('dark/', '').split('/');
+          if (path.length >= 2) {
+            const category = path[0];
+            const subcategory = path[1];
+            
+            if (!semanticColorsDark[category]) {
+              semanticColorsDark[category] = {};
+            }
+            
+            // Map to primitive color references
+            let reference = '';
+            if (variable.name.includes('brand')) {
+              reference = '{Umain-colors.Value.Gold.400}';
+            } else if (variable.name.includes('primary')) {
+              reference = '{Umain-colors.Value.Greyscale.100}';
+            } else if (variable.name.includes('secondary')) {
+              reference = '{Umain-colors.Value.Greyscale.300}';
+            } else if (variable.name.includes('accent')) {
+              reference = '{Umain-colors.Value.Gold.400}';
+            } else if (variable.name.includes('error')) {
+              reference = '{Umain-colors.Value.Red.400}';
+            } else if (variable.name.includes('success')) {
+              reference = '{Umain-colors.Value.Green.400}';
+            } else if (variable.name.includes('warning')) {
+              reference = '{Umain-colors.Value.Orange.400}';
+            } else {
+              reference = '{Umain-colors.Value.Greyscale.500}'; // fallback
+            }
+            
+            semanticColorsDark[category][subcategory] = {
+              value: reference,
+              type: 'color'
+            };
+          }
+        }
+      });
+    }
+  });
+
+  // Step 3: Create typography primitives
+  const typographyPrimitives: any = {
+    'font-family': {},
+    'font-size': {},
+    'font-weight': {},
+    'letter-spacing': {},
+    'line-height': {}
+  };
+
+  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
+    if (collectionName === 'Umain-typography') {
+      (variables as any[]).forEach((variable: any) => {
+        const nameParts = variable.name.split('/');
+        if (nameParts.length >= 2) {
+          const category = nameParts[0];
+          const token = nameParts[1];
+          
+          if (typographyPrimitives[category]) {
+            typographyPrimitives[category][token] = {
+              value: variable.value,
+              type: 'dimension'
+            };
+          }
+        }
+      });
+    }
+  });
+
+  // Step 4: Create composite typography styles
+  const compositeTypography: any = {};
+  
+  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
+    if (collectionName === 'Umain-typo tokens') {
+      (variables as any[]).forEach((variable: any) => {
+        const nameParts = variable.name.split('/');
+        if (nameParts.length >= 3) {
+          const category = nameParts[0];
+          const subcategory = nameParts[1];
+          const property = nameParts[2];
+          
+          if (!compositeTypography[category]) {
+            compositeTypography[category] = {};
+          }
+          if (!compositeTypography[category][subcategory]) {
+            compositeTypography[category][subcategory] = {};
+          }
+          
+          // Create reference to primitive
+          let reference = '';
+          if (property === 'size') {
+            reference = `{Umain-typography.Original.font-size.${subcategory}}`;
+          } else if (property === 'weight') {
+            reference = `{Umain-typography.Original.font-weight.${subcategory}}`;
+          } else if (property === 'line-height') {
+            reference = `{Umain-typography.Original.line-height.${subcategory}}`;
+          } else if (property === 'letter-spacing') {
+            reference = `{Umain-typography.Original.letter-spacing.${subcategory}}`;
+          }
+          
+          if (reference) {
+            compositeTypography[category][subcategory][property] = {
+              value: reference,
+              type: 'dimension'
+            };
+          }
+        }
+      });
+    }
+  });
+
+  // Step 5: Create context-aware spatial sets
+  const spatialPortrait: any = {};
+  const spatialLandscape: any = {};
+  
+  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
+    if (collectionName === 'Semantic Spatial') {
+      (variables as any[]).forEach((variable: any) => {
+        // Portrait values (default)
+        spatialPortrait[variable.name] = {
+          value: variable.value,
+          type: 'dimension'
+        };
+        
+        // Landscape values (adjusted)
+        let landscapeValue = variable.value;
+        if (variable.name === 'maxImWideWidth') {
+          landscapeValue = 220;
+        } else if (variable.name === 'maxHeroBannerWidth') {
+          landscapeValue = 500;
+        } else if (variable.name === 'maxDealCardWidth') {
+          landscapeValue = 500;
+        }
+        // Add more landscape-specific adjustments as needed
+        
+        spatialLandscape[variable.name] = {
+          value: landscapeValue,
+          type: 'dimension'
+        };
+      });
+    }
+  });
+
+  // Combine all sets
+  Object.assign(tokenStudio, primitiveColors);
+  tokenStudio['Umain-typography/Original'] = typographyPrimitives;
+  tokenStudio['Umain - semantic Colors/Light'] = semanticColorsLight;
+  tokenStudio['Umain - semantic Colors/Dark'] = semanticColorsDark;
+  tokenStudio['Semantic Spatial/portrait'] = spatialPortrait;
+  tokenStudio['Semantic Spatial/landscape'] = spatialLandscape;
+  tokenStudio['Umain-typo tokens/Original'] = compositeTypography;
+
+  // Set metadata
+  tokenStudio.$metadata.tokenSetOrder = [
+    'Umain-colors/Value',
+    'Umain-typography/Original',
+    'Umain - semantic Colors/Light',
+    'Umain - semantic Colors/Dark',
+    'Semantic Spatial/portrait',
+    'Semantic Spatial/landscape',
+    'Umain-typo tokens/Original'
+  ];
+
+  return tokenStudio;
+}
+
 // Listen for messages from the UI
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'export-tokens') {
@@ -1745,6 +2007,24 @@ figma.ui.onmessage = async (msg) => {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       figma.ui.postMessage({ type: 'export-error', message: errorMessage });
       figma.notify('Error exporting color palette. See plugin console for details.', { error: true });
+      console.error(error);
+    }
+  } else if (msg.type === 'export-token-studio') {
+    try {
+      const allVariables = await getAllVariables();
+      const selectedCollections = msg.selectedCollections || [];
+      const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+      const tokenStudio = transformToTokenStudio(filteredVariables);
+      
+      figma.ui.postMessage({
+        type: 'export-token-studio-complete',
+        output: JSON.stringify(tokenStudio, null, 2),
+        filename: 'tokens-studio.json'
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      figma.ui.postMessage({ type: 'export-error', message: errorMessage });
+      figma.notify('Error exporting Token Studio format. See plugin console for details.', { error: true });
       console.error(error);
     }
   } else if (msg.type === 'push-to-github') {
