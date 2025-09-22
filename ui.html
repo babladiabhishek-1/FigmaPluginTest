@@ -787,8 +787,27 @@
         btn.classList.add('active');
         document.getElementById(targetTab + '-tab').classList.add('active');
         
+        // Auto-load content for specific tabs
+        if (targetTab === 'standard') {
+          loadStandardTokens();
+        }
       };
     });
+
+    // Auto-load Standard tokens when tab is switched to
+    function loadStandardTokens() {
+      output.value = 'Loading tokens, please wait...';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      status.textContent = 'Loading...';
+      
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-token-studio',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
+    }
 
     // Export button handlers
     exportBtn.onclick = () => {
@@ -1280,6 +1299,17 @@
         if (downloadBtn) {
           downloadBtn.setAttribute('data-filename', message.filename || 'color-palette.json');
         }
+      } else if (message.type === 'export-token-studio-complete') {
+        output.value = message.output;
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
+        status.textContent = 'Tokens exported successfully!';
+        
+        // Update download button with correct filename
+        if (downloadBtn) {
+          downloadBtn.setAttribute('data-filename', message.filename || 'tokens-studio.json');
+        }
+      }
     };
   </script>
 </body>
