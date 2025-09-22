@@ -599,20 +599,21 @@
 
     <!-- Tab Navigation -->
     <div class="tab-container">
-      <button class="tab-btn active" data-tab="standard">Standard</button>
-      <button class="tab-btn" data-tab="dtcg">Style Dictionary</button>
-      <button class="tab-btn" data-tab="tailwind">Tailwind</button>
+      <button class="tab-btn active" data-tab="figma">1. Figma</button>
+      <button class="tab-btn" data-tab="json">2. JSON</button>
+      <button class="tab-btn" data-tab="transformer">3. Transformer</button>
+      <button class="tab-btn" data-tab="style-dictionary">4. Style Dictionary</button>
+      <button class="tab-btn" data-tab="platforms">5. Platforms</button>
       <button class="tab-btn" data-tab="colors">Check Colors</button>
-      <button class="tab-btn" data-tab="github">GitHub</button>
     </div>
 
     <!-- Content Area -->
     <div class="content-area">
-      <!-- Standard Format Tab -->
-      <div id="standard-tab" class="tab-content active">
-        <div class="format-info">Token Studio format with references, context-aware tokens, and proper metadata</div>
+      <!-- 1. Figma Tab -->
+      <div id="figma-tab" class="tab-content active">
+        <div class="format-info">Extract design tokens directly from Figma variables and collections</div>
         <div class="export-actions">
-          <button id="export-btn" class="btn btn-primary">Export Tokens</button>
+          <button id="export-btn" class="btn btn-primary">Extract from Figma</button>
         </div>
       </div>
 
@@ -643,6 +644,52 @@
         <div class="format-info">Tailwind CSS configuration file for modern web development</div>
         <div class="export-actions">
           <button id="export-tailwind-css-btn" class="btn btn-primary">Export Tailwind Config</button>
+        </div>
+      </div>
+
+      <!-- 2. JSON Tab -->
+      <div id="json-tab" class="tab-content">
+        <div class="format-info">Raw JSON output from Figma - Token Studio format with references and metadata</div>
+        <div class="export-actions">
+          <button id="export-json-btn" class="btn btn-primary">Generate JSON</button>
+        </div>
+      </div>
+
+      <!-- 3. Transformer Tab -->
+      <div id="transformer-tab" class="tab-content">
+        <div class="format-info">Transform JSON using Token Transformer for Style Dictionary compatibility</div>
+        <div class="export-actions">
+          <button id="export-transformer-btn" class="btn btn-primary">Transform Tokens</button>
+        </div>
+      </div>
+
+      <!-- 4. Style Dictionary Tab -->
+      <div id="style-dictionary-tab" class="tab-content">
+        <div class="format-info">Style Dictionary - Industry standard design token platform with 50+ output formats</div>
+        <div class="export-actions">
+          <div class="platform-selector">
+            <label for="platform-select">Select Platform:</label>
+            <select id="platform-select" class="platform-dropdown">
+              <option value="css">CSS Custom Properties</option>
+              <option value="scss">SCSS Variables</option>
+              <option value="js">JavaScript/ES6</option>
+              <option value="ts">TypeScript</option>
+              <option value="ios">iOS Swift</option>
+              <option value="android">Android Kotlin</option>
+              <option value="flutter">Flutter Dart</option>
+              <option value="react-native">React Native</option>
+              <option value="json">JSON</option>
+            </select>
+          </div>
+          <button id="export-style-dictionary-btn" class="btn btn-primary">Export Style Dictionary</button>
+        </div>
+      </div>
+
+      <!-- 5. Platforms Tab -->
+      <div id="platforms-tab" class="tab-content">
+        <div class="format-info">Generate platform-specific code for iOS, Android, Flutter, Web, and more</div>
+        <div class="export-actions">
+          <button id="export-platforms-btn" class="btn btn-primary">Generate All Platforms</button>
         </div>
       </div>
 
@@ -788,18 +835,28 @@
         document.getElementById(targetTab + '-tab').classList.add('active');
         
         // Auto-load content for specific tabs
-        if (targetTab === 'standard') {
-          loadStandardTokens();
+        if (targetTab === 'figma') {
+          loadFigmaTokens();
+        } else if (targetTab === 'json') {
+          loadJSONTokens();
+        } else if (targetTab === 'transformer') {
+          loadTransformerTokens();
+        } else if (targetTab === 'style-dictionary') {
+          loadStyleDictionaryTokens();
+        } else if (targetTab === 'platforms') {
+          loadPlatformTokens();
         }
       };
     });
 
-    // Auto-load Standard tokens when tab is switched to
-    function loadStandardTokens() {
-      output.value = 'Loading tokens, please wait...';
+    // Workflow Functions - Following Halodoc's Pipeline
+    
+    // 1. Figma - Extract tokens directly from Figma
+    function loadFigmaTokens() {
+      output.value = 'Extracting tokens from Figma...';
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
-      status.textContent = 'Loading...';
+      status.textContent = 'Extracting...';
       
       parent.postMessage({ 
         pluginMessage: { 
@@ -809,19 +866,85 @@
       }, '*');
     }
 
-    // Export button handlers
-    exportBtn.onclick = () => {
-      output.value = 'Exporting tokens, please wait...';
+    // 2. JSON - Generate Token Studio JSON format
+    function loadJSONTokens() {
+      output.value = 'Generating Token Studio JSON...';
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
-      status.textContent = 'Exporting...';
+      status.textContent = 'Generating JSON...';
+      
       parent.postMessage({ 
         pluginMessage: { 
           type: 'export-token-studio',
           selectedCollections: Array.from(selectedCollections)
         } 
       }, '*');
-    };
+    }
+
+    // 3. Transformer - Transform for Style Dictionary compatibility
+    function loadTransformerTokens() {
+      output.value = 'Transforming tokens for Style Dictionary...';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      status.textContent = 'Transforming...';
+      
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-style-dictionary',
+          platform: 'json',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
+    }
+
+    // 4. Style Dictionary - Generate platform-specific code
+    function loadStyleDictionaryTokens() {
+      output.value = 'Loading Style Dictionary...';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      status.textContent = 'Loading Style Dictionary...';
+      
+      // Auto-select first platform
+      const platformSelect = document.getElementById('platform-select');
+      if (platformSelect) {
+        platformSelect.value = 'css';
+      }
+    }
+
+    // 5. Platforms - Generate all platform code
+    function loadPlatformTokens() {
+      output.value = 'Generating all platform code...';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      status.textContent = 'Generating platforms...';
+      
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-style-dictionary',
+          platform: 'all',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
+    }
+
+    // Export button handlers for workflow tabs
+    exportBtn.onclick = () => loadFigmaTokens();
+    
+    const exportJsonBtn = document.getElementById('export-json-btn');
+    const exportTransformerBtn = document.getElementById('export-transformer-btn');
+    const exportPlatformsBtn = document.getElementById('export-platforms-btn');
+    
+    if (exportJsonBtn) {
+      exportJsonBtn.onclick = () => loadJSONTokens();
+    }
+    
+    if (exportTransformerBtn) {
+      exportTransformerBtn.onclick = () => loadTransformerTokens();
+    }
+    
+    if (exportPlatformsBtn) {
+      exportPlatformsBtn.onclick = () => loadPlatformTokens();
+    }
 
     exportStyleDictionaryBtn.onclick = () => {
       const selectedPlatform = platformSelect.value;
