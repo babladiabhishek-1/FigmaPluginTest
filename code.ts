@@ -31,11 +31,14 @@ function base64Encode(str: string): string {
 
 // --- UTILITY FUNCTIONS ---
 
-// Helper to convert Figma's 0-1 RGBA values to a hex string (#RRGGBBAA)
+// Helper to convert Figma's 0-1 RGBA values to a hex string (#RRGGBB)
 function rgbaToHex(r: number, g: number, b: number, a: number): string {
   const toHex = (c: number) => ('0' + Math.round(c * 255).toString(16)).slice(-2);
-  const alpha = a < 1 ? toHex(a) : '';
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}${alpha}`;
+  // Only include alpha if it's not fully opaque (1.0)
+  if (a < 1) {
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}${toHex(a)}`;
+  }
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 // Helper to set a value in a nested object based on a path array
@@ -495,15 +498,25 @@ function parseColor(colorValue: string): { r: number, g: number, b: number, a: n
         hex = hex.split('').map(char => char + char).join('');
       }
       
-      // Ensure we have 6 or 8 digits
+      // Handle 6-digit hex (no alpha) or 8-digit hex (with alpha)
+      let r: number, g: number, b: number, a: number;
       if (hex.length === 6) {
-        hex = 'FF' + hex; // Add alpha if missing
+        // 6-digit hex: #RRGGBB
+        r = parseInt(hex.substr(0, 2), 16) / 255;
+        g = parseInt(hex.substr(2, 2), 16) / 255;
+        b = parseInt(hex.substr(4, 2), 16) / 255;
+        a = 1; // Fully opaque
+      } else if (hex.length === 8) {
+        // 8-digit hex: #AARRGGBB
+        a = parseInt(hex.substr(0, 2), 16) / 255;
+        r = parseInt(hex.substr(2, 2), 16) / 255;
+        g = parseInt(hex.substr(4, 2), 16) / 255;
+        b = parseInt(hex.substr(6, 2), 16) / 255;
+      } else {
+        // Fallback
+        r = g = b = 0;
+        a = 1;
       }
-      
-      const r = parseInt(hex.substr(2, 2), 16) / 255;
-      const g = parseInt(hex.substr(4, 2), 16) / 255;
-      const b = parseInt(hex.substr(6, 2), 16) / 255;
-      const a = parseInt(hex.substr(0, 2), 16) / 255;
       
       return { r, g, b, a, hex: hex.toUpperCase() };
     }
@@ -1743,13 +1756,17 @@ function transformToTokenStudio(tokens: any): any {
                 const g = parseInt(rgbaMatch[2]);
                 const b = parseInt(rgbaMatch[3]);
                 const a = parseFloat(rgbaMatch[4]);
+              // Only include alpha if it's not fully opaque (1.0)
+              if (a < 1) {
                 const alpha = Math.round(a * 255);
                 colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+              } else {
+                colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+              }
               }
             } else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
-              if (variable.value.length === 7) {
-                colorValue = variable.value + 'FF';
-              }
+              // Keep the original hex value without adding FF
+              colorValue = variable.value;
             }
             
             primitiveColors['Primitive Colors'][colorFamily][colorShade] = {
@@ -1784,13 +1801,17 @@ function transformToTokenStudio(tokens: any): any {
                 const g = parseInt(rgbaMatch[2]);
                 const b = parseInt(rgbaMatch[3]);
                 const a = parseFloat(rgbaMatch[4]);
+              // Only include alpha if it's not fully opaque (1.0)
+              if (a < 1) {
                 const alpha = Math.round(a * 255);
                 colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+              } else {
+                colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+              }
               }
             } else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
-              if (variable.value.length === 7) {
-                colorValue = variable.value + 'FF';
-              }
+              // Keep the original hex value without adding FF
+              colorValue = variable.value;
             }
             
             primitiveColors[primitiveName][colorFamily][colorShade] = {
@@ -2003,9 +2024,9 @@ function transformToTokenStudio(tokens: any): any {
   if (Object.keys(primitiveColors).length === 0) {
     tokenStudio['Primitive Colors'] = {
       'Greyscale': {
-        '100': { value: '#f9f9f9FF', type: 'color' },
-        '500': { value: '#959595FF', type: 'color' },
-        '900': { value: '#1b1b1bFF', type: 'color' }
+        '100': { value: '#f9f9f9', type: 'color' },
+        '500': { value: '#959595', type: 'color' },
+        '900': { value: '#1b1b1b', type: 'color' }
       }
     };
   }
@@ -2043,13 +2064,13 @@ function transformToTokenStudio(tokens: any): any {
     console.log('Creating fallback Token Studio structure...');
     tokenStudio['Umain-colors/Value'] = {
       'Greyscale': {
-        '100': { value: '#f9f9f9FF', type: 'color' },
-        '500': { value: '#959595FF', type: 'color' },
-        '900': { value: '#1b1b1bFF', type: 'color' }
+        '100': { value: '#f9f9f9', type: 'color' },
+        '500': { value: '#959595', type: 'color' },
+        '900': { value: '#1b1b1b', type: 'color' }
       },
       'Blue': {
-        '300': { value: '#4dbbffFF', type: 'color' },
-        '700': { value: '#006baeFF', type: 'color' }
+        '300': { value: '#4dbbff', type: 'color' },
+        '700': { value: '#006bae', type: 'color' }
       }
     };
     
