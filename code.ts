@@ -697,6 +697,12 @@ async function getAllVariables() {
         }
       }
       
+      // Skip line-height variables from Umain-typography to avoid duplication with Dynamic Text Size
+      if (collection?.name === 'Umain-typography' && variable.name.toLowerCase().includes('line-height')) {
+        console.log(`Skipping duplicate line-height variable: ${variable.name} from ${collection.name}`);
+        continue;
+      }
+      
       const variableData = {
         id: variable.id,
         name: variable.name,
