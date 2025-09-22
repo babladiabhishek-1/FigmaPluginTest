@@ -1657,7 +1657,10 @@ figma.ui.onmessage = async (msg) => {
       const allVariables = await getAllVariables();
       const selectedCollections = msg.selectedCollections || [];
       const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
-      const jsonString = JSON.stringify(filteredVariables, null, 2);
+      
+      // Transform to proper design token structure
+      const transformedTokens = transformToStyleDictionary(filteredVariables);
+      const jsonString = JSON.stringify(transformedTokens, null, 2);
       figma.ui.postMessage({ type: 'export-complete', jsonString });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
