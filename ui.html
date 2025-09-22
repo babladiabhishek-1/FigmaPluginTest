@@ -603,7 +603,6 @@
       <button class="tab-btn" data-tab="dtcg">Style Dictionary</button>
       <button class="tab-btn" data-tab="tailwind">Tailwind</button>
       <button class="tab-btn" data-tab="colors">Check Colors</button>
-      <button class="tab-btn" data-tab="token-studio">Token Studio</button>
       <button class="tab-btn" data-tab="github">GitHub</button>
     </div>
 
@@ -611,9 +610,9 @@
     <div class="content-area">
       <!-- Standard Format Tab -->
       <div id="standard-tab" class="tab-content active">
-        <div class="format-info">Standard format with $type, $value, and $description properties</div>
+        <div class="format-info">Token Studio format with references, context-aware tokens, and proper metadata</div>
         <div class="export-actions">
-          <button id="export-btn" class="btn btn-primary">Export Standard Tokens</button>
+          <button id="export-btn" class="btn btn-primary">Export Tokens</button>
         </div>
       </div>
 
@@ -661,24 +660,6 @@
         </div>
       </div>
 
-      <!-- Token Studio Tab -->
-      <div id="token-studio-tab" class="tab-content">
-        <div class="format-info">Token Studio format with references, context-aware tokens, and proper metadata</div>
-        <div class="export-actions">
-          <button id="export-token-studio-btn" class="btn btn-primary">Export Token Studio</button>
-        </div>
-        <div class="output-container">
-          <div class="output-header">
-            <h4>Token Studio Output</h4>
-            <div class="output-actions">
-              <button id="copy-token-studio-btn" class="btn btn-secondary" disabled>Copy</button>
-              <button id="download-token-studio-btn" class="btn btn-secondary" disabled>Download</button>
-            </div>
-          </div>
-          <textarea id="token-studio-output" class="output-textarea" readonly tabindex="-1" placeholder="Token Studio format will appear here when you switch to this tab..."></textarea>
-          <div class="status" id="token-studio-status">Ready to generate Token Studio format</div>
-        </div>
-      </div>
 
       <!-- GitHub Integration Tab -->
       <div id="github-tab" class="tab-content">
@@ -806,16 +787,12 @@
         btn.classList.add('active');
         document.getElementById(targetTab + '-tab').classList.add('active');
         
-        // Auto-load content for specific tabs
-        if (targetTab === 'token-studio') {
-          loadTokenStudio();
-        }
       };
     });
 
     // Export button handlers
     exportBtn.onclick = () => {
-      output.value = 'Exporting Token Studio format, please wait...';
+      output.value = 'Exporting tokens, please wait...';
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       status.textContent = 'Exporting...';
@@ -879,64 +856,6 @@
       }, '*');
     };
 
-    // Token Studio functionality
-    const exportTokenStudioBtn = document.getElementById('export-token-studio-btn');
-    const tokenStudioOutput = document.getElementById('token-studio-output');
-    const copyTokenStudioBtn = document.getElementById('copy-token-studio-btn');
-    const downloadTokenStudioBtn = document.getElementById('download-token-studio-btn');
-    const tokenStudioStatus = document.getElementById('token-studio-status');
-    
-    exportTokenStudioBtn.onclick = () => {
-      parent.postMessage({ 
-        pluginMessage: { 
-          type: 'export-token-studio',
-          selectedCollections: Array.from(selectedCollections)
-        } 
-      }, '*');
-    };
-
-    // Auto-load Token Studio when tab is switched to
-    function loadTokenStudio() {
-      tokenStudioStatus.textContent = 'Loading Token Studio format...';
-      copyTokenStudioBtn.disabled = true;
-      downloadTokenStudioBtn.disabled = true;
-      
-      parent.postMessage({ 
-        pluginMessage: { 
-          type: 'export-token-studio',
-          selectedCollections: Array.from(selectedCollections)
-        } 
-      }, '*');
-    }
-
-    // Copy functionality for Token Studio
-    copyTokenStudioBtn.onclick = () => {
-      tokenStudioOutput.select();
-      document.execCommand('copy');
-      tokenStudioStatus.textContent = 'Token Studio format copied to clipboard!';
-      setTimeout(() => {
-        tokenStudioStatus.textContent = 'Token Studio format ready';
-      }, 2000);
-    };
-
-    // Download functionality for Token Studio
-    downloadTokenStudioBtn.onclick = () => {
-      const data = tokenStudioOutput.value;
-      const filename = downloadTokenStudioBtn.getAttribute('data-filename') || 'tokens-studio.json';
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      tokenStudioStatus.textContent = 'Token Studio format downloaded!';
-      setTimeout(() => {
-        tokenStudioStatus.textContent = 'Token Studio format ready';
-      }, 2000);
-    };
 
     // Function to render color palette
     function renderColorPalette(colors) {
@@ -1304,7 +1223,7 @@
         output.value = message.jsonString;
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
-        status.textContent = 'Token Studio format exported successfully!';
+        status.textContent = 'Tokens exported successfully!';
       } else if (message.type === 'export-error') {
         output.value = `Error: ${message.message}`;
         copyBtn.disabled = true;
@@ -1361,33 +1280,6 @@
         if (downloadBtn) {
           downloadBtn.setAttribute('data-filename', message.filename || 'color-palette.json');
         }
-      } else if (message.type === 'export-token-studio-complete') {
-        // Update main output area
-        output.value = message.output;
-        copyBtn.disabled = false;
-        downloadBtn.disabled = false;
-        status.textContent = 'Token Studio format exported successfully!';
-        
-        // Update download button with correct filename
-        if (downloadBtn) {
-          downloadBtn.setAttribute('data-filename', message.filename || 'tokens-studio.json');
-        }
-        
-        // Update Token Studio specific elements
-        if (tokenStudioOutput) {
-          tokenStudioOutput.value = message.output;
-        }
-        if (copyTokenStudioBtn) {
-          copyTokenStudioBtn.disabled = false;
-        }
-        if (downloadTokenStudioBtn) {
-          downloadTokenStudioBtn.disabled = false;
-          downloadTokenStudioBtn.setAttribute('data-filename', message.filename || 'tokens-studio.json');
-        }
-        if (tokenStudioStatus) {
-          tokenStudioStatus.textContent = 'Token Studio format ready';
-        }
-      }
     };
   </script>
 </body>
