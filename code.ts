@@ -200,20 +200,28 @@ async function exportTokens() {
 // Transform tokens to Style Dictionary format
 function transformToStyleDictionary(tokens: any): any {
   const sdTokens: any = {};
-  
+
   Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
-    // Convert collection name to Style Dictionary format
-    const categoryName = collectionName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '');
-    sdTokens[categoryName] = {};
-    
+    // Use the collection name as the top-level key
+    sdTokens[collectionName] = {};
+
     (variables as any[]).forEach((variable: any) => {
-      // Convert variable name to Style Dictionary format
-      const tokenName = variable.name
-        .toLowerCase()
-        .replace(/[^a-zA-Z0-9]/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-      
+      // Parse the variable name to create hierarchical structure
+      const nameParts = variable.name.split('-');
+      let currentLevel = sdTokens[collectionName];
+
+      // Create nested structure based on variable name patterns
+      for (let i = 0; i < nameParts.length - 1; i++) {
+        const part = nameParts[i];
+        if (!currentLevel[part]) {
+          currentLevel[part] = {};
+        }
+        currentLevel = currentLevel[part];
+      }
+
+      // The last part is the actual token name
+      const tokenName = nameParts[nameParts.length - 1];
+
       // Map Figma types to Style Dictionary types
       let sdType = 'other';
       switch (variable.type) {
@@ -225,22 +233,25 @@ function transformToStyleDictionary(tokens: any): any {
             break;
         case 'STRING':
           sdType = 'string';
-            break;
+          break;
         case 'BOOLEAN':
           sdType = 'boolean';
             break;
           default:
           sdType = 'other';
       }
-      
-      sdTokens[categoryName][tokenName] = {
-        value: variable.value,
+
+      // Use the actual value from the variable
+      const tokenValue = variable.value !== null ? variable.value : '';
+
+      currentLevel[tokenName] = {
+        value: tokenValue,
         type: sdType,
         description: variable.description || ''
       };
     });
   });
-  
+
   return sdTokens;
 }
 
@@ -602,10 +613,50 @@ async function getAllVariables() {
       const collection = collections.find(c => c.variableIds.includes(variable.id));
       const modes = collection ? collection.modes : [];
       
+      // Get the actual value from the first mode
+      let actualValue = null;
+      if (modes.length > 0) {
+        const firstModeId = modes[0].modeId;
+        const value = variable.valuesByMode[firstModeId];
+        
+        if (value !== undefined) {
+          // Handle different value types
+          if (typeof value === 'object' && value !== null) {
+            if ('type' in value && value.type === 'VARIABLE_ALIAS') {
+              // This is a reference to another variable
+              try {
+                const referencedVariable = await figma.variables.getVariableByIdAsync(value.id);
+                if (referencedVariable) {
+                  const referencedValue = referencedVariable.valuesByMode[firstModeId];
+                  actualValue = referencedValue;
+                } else {
+                  actualValue = value;
+                }
+              } catch (error) {
+                console.warn(`Could not resolve variable reference for ${variable.name}:`, error);
+                actualValue = value;
+              }
+            } else if ('r' in value && 'g' in value && 'b' in value) {
+              // This is a color object with r, g, b, a values
+              const r = Math.round(value.r * 255);
+              const g = Math.round(value.g * 255);
+              const b = Math.round(value.b * 255);
+              const a = 'a' in value ? value.a : 1;
+              actualValue = `rgba(${r}, ${g}, ${b}, ${a})`;
+            } else {
+              actualValue = value;
+            }
+          } else {
+            actualValue = value;
+          }
+        }
+      }
+      
       const variableData = {
         id: variable.id,
         name: variable.name,
         type: variable.resolvedType,
+        value: actualValue,
         collection: collection?.name || 'Unknown',
         modes: modes.map(m => m.name),
         description: variable.description || ''
