@@ -262,6 +262,34 @@
       padding: 12px;
       display: flex;
       gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .platform-selector {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .platform-selector label {
+      font-size: 11px;
+      color: #999;
+      font-weight: 500;
+    }
+
+    .platform-dropdown {
+      padding: 6px 8px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background-color: #2c2c2c;
+      color: #ffffff;
+      font-size: 11px;
+      min-width: 200px;
+    }
+
+    .platform-dropdown:focus {
+      outline: none;
+      border-color: #18a0fb;
     }
 
     /* Buttons */
@@ -487,7 +515,7 @@
     <!-- Tab Navigation -->
     <div class="tab-container">
       <button class="tab-btn active" data-tab="standard">Standard</button>
-      <button class="tab-btn" data-tab="dtcg">DTCG</button>
+      <button class="tab-btn" data-tab="dtcg">Style Dictionary</button>
       <button class="tab-btn" data-tab="tailwind">Tailwind</button>
       <button class="tab-btn" data-tab="github">GitHub</button>
     </div>
@@ -502,12 +530,25 @@
         </div>
       </div>
 
-      <!-- DTCG Format Tab -->
+      <!-- Style Dictionary Tab -->
       <div id="dtcg-tab" class="tab-content">
-        <div class="format-info">Design Tokens Community Group format with themes and metadata</div>
+        <div class="format-info">Style Dictionary - Industry standard design token platform with 50+ output formats</div>
         <div class="export-actions">
-          <button id="export-dtcg-btn" class="btn btn-primary">Export DTCG Tokens</button>
-          <button id="export-enhanced-dtcg-btn" class="btn btn-secondary">Export Enhanced DTCG</button>
+          <div class="platform-selector">
+            <label for="platform-select">Select Platform:</label>
+            <select id="platform-select" class="platform-dropdown">
+              <option value="css">CSS Custom Properties</option>
+              <option value="scss">SCSS Variables</option>
+              <option value="js">JavaScript/ES6</option>
+              <option value="ts">TypeScript</option>
+              <option value="ios">iOS Swift</option>
+              <option value="android">Android Kotlin</option>
+              <option value="flutter">Flutter Dart</option>
+              <option value="react-native">React Native</option>
+              <option value="json">JSON</option>
+            </select>
+          </div>
+          <button id="export-style-dictionary-btn" class="btn btn-primary">Export Style Dictionary</button>
         </div>
       </div>
 
@@ -589,8 +630,8 @@
 
     // DOM Elements
     const exportBtn = document.getElementById('export-btn');
-    const exportDTCGBtn = document.getElementById('export-dtcg-btn');
-    const exportEnhancedDTCGBtn = document.getElementById('export-enhanced-dtcg-btn');
+    const exportStyleDictionaryBtn = document.getElementById('export-style-dictionary-btn');
+    const platformSelect = document.getElementById('platform-select');
     const exportTailwindCSSBtn = document.getElementById('export-tailwind-css-btn');
     const copyBtn = document.getElementById('copy-btn');
     const downloadBtn = document.getElementById('download-btn');
@@ -661,27 +702,17 @@
       }, '*');
     };
 
-    exportDTCGBtn.onclick = () => {
-      output.value = 'Exporting DTCG format, please wait...';
+    exportStyleDictionaryBtn.onclick = () => {
+      const selectedPlatform = platformSelect.value;
+      const platformName = platformSelect.options[platformSelect.selectedIndex].text;
+      output.value = `Exporting ${platformName}, please wait...`;
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       status.textContent = '';
       parent.postMessage({ 
         pluginMessage: { 
-          type: 'export-dtcg-tokens',
-          selectedCollections: Array.from(selectedCollections)
-        } 
-      }, '*');
-    };
-
-    exportEnhancedDTCGBtn.onclick = () => {
-      output.value = 'Exporting enhanced DTCG format, please wait...';
-      copyBtn.disabled = true;
-      downloadBtn.disabled = true;
-      status.textContent = '';
-      parent.postMessage({ 
-        pluginMessage: { 
-          type: 'export-enhanced-dtcg',
+          type: 'export-style-dictionary',
+          platform: selectedPlatform,
           selectedCollections: Array.from(selectedCollections)
         } 
       }, '*');
@@ -750,11 +781,13 @@
     // Download file
     downloadBtn.onclick = () => {
       if (output.value) {
-        const blob = new Blob([output.value], { type: 'application/json' });
+        const filename = downloadBtn.getAttribute('data-filename') || 'design-tokens.json';
+        const mimeType = getMimeTypeForFilename(filename);
+        const blob = new Blob([output.value], { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'design-tokens.json';
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -763,6 +796,21 @@
         setTimeout(() => status.textContent = '', 2000);
       }
     };
+
+    function getMimeTypeForFilename(filename) {
+      const extension = filename.split('.').pop().toLowerCase();
+      const mimeTypes = {
+        'css': 'text/css',
+        'scss': 'text/scss',
+        'js': 'application/javascript',
+        'ts': 'application/typescript',
+        'swift': 'text/swift',
+        'kt': 'text/kotlin',
+        'dart': 'text/dart',
+        'json': 'application/json'
+      };
+      return mimeTypes[extension] || 'application/json';
+    }
 
     // GitHub functionality
     testConnectionBtn.onclick = () => {
@@ -1000,16 +1048,16 @@
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
         status.textContent = 'Standard export successful!';
-      } else if (message.type === 'export-dtcg-complete') {
-        output.value = message.jsonString;
+      } else if (message.type === 'export-style-dictionary-complete') {
+        output.value = message.output;
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
-        status.textContent = 'DTCG export successful!';
-      } else if (message.type === 'export-enhanced-dtcg-complete') {
-        output.value = message.jsonString;
-        copyBtn.disabled = false;
-        downloadBtn.disabled = false;
-        status.textContent = 'Enhanced DTCG export successful!';
+        status.textContent = `${message.platform} export successful!`;
+        
+        // Update download button with correct filename
+        if (downloadBtn) {
+          downloadBtn.setAttribute('data-filename', message.filename);
+        }
       } else if (message.type === 'export-tailwind-css-complete') {
         output.value = message.tailwindConfig;
         copyBtn.disabled = false;

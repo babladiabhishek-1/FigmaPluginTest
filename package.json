@@ -19,7 +19,8 @@
     "export"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "style-dictionary": "^5.0.4"
+  }
 }
-
-

@@ -197,116 +197,29 @@ async function exportTokens() {
 
 // --- DTCG FORMAT TRANSFORMATION ---
 
-// Transform standard tokens to DTCG format
-function transformToDTCG(tokens: any): any {
-  const dtcgTokens: any = {
-    $metadata: {
-      tokenSetOrder: [],
-      tokenSets: {}
-    }
-  };
-  
-  const tokenSets: string[] = [];
-  
-  function processTokenGroup(group: any, groupName: string, parentPath: string[] = []) {
-    for (const [key, value] of Object.entries(group)) {
-      if (value && typeof value === 'object' && '$type' in value) {
-        // This is a token
-        const token = value as any;
-        const dtcgToken: any = {};
-        
-        // Map token types to proper DTCG types
-        switch (token.$type) {
-          case 'color':
-            dtcgToken.$type = 'color';
-            dtcgToken.$value = token.$value;
-            break;
-          case 'number':
-            // Determine if it's a dimension, font size, or other number type
-            if (key.toLowerCase().includes('size') || key.toLowerCase().includes('font')) {
-              dtcgToken.$type = 'fontSize';
-              dtcgToken.$value = `${token.$value}px`;
-            } else if (key.toLowerCase().includes('line') || key.toLowerCase().includes('height')) {
-              dtcgToken.$type = 'lineHeight';
-              dtcgToken.$value = token.$value; // Line height is often unitless
-            } else if (key.toLowerCase().includes('spacing') || key.toLowerCase().includes('margin') || key.toLowerCase().includes('padding')) {
-              dtcgToken.$type = 'spacing';
-              dtcgToken.$value = `${token.$value}px`;
-            } else {
-              dtcgToken.$type = 'dimension';
-              dtcgToken.$value = `${token.$value}px`;
-            }
-            break;
-          case 'text':
-            dtcgToken.$type = 'string';
-            dtcgToken.$value = token.$value;
-            break;
-          case 'boolean':
-            dtcgToken.$type = 'boolean';
-            dtcgToken.$value = token.$value;
-            break;
-          default:
-            dtcgToken.$type = token.$type;
-            dtcgToken.$value = token.$value;
-        }
-        
-        // Add description if present
-        if (token.$description) {
-          dtcgToken.$description = token.$description;
-        }
-        
-        // Add extensions for DTCG compliance
-        dtcgToken.$extensions = {
-          'com.figma': {
-            hiddenFromPublishing: false,
-            scopes: ['ALL_SCOPES']
-          }
-        };
-        
-        // Create proper nested structure
-        let current = dtcgTokens;
-        const fullPath = [...parentPath, key];
-        
-        for (let i = 0; i < fullPath.length - 1; i++) {
-          const pathKey = fullPath[i];
-          if (!current[pathKey]) {
-            current[pathKey] = {};
-          }
-          current = current[pathKey];
-        }
-        
-        current[fullPath[fullPath.length - 1]] = dtcgToken;
-        
-        // Track token sets for metadata
-        const tokenSetName = parentPath[0] || 'global';
-        if (!tokenSets.includes(tokenSetName)) {
-          tokenSets.push(tokenSetName);
-        }
-        
-      } else if (value && typeof value === 'object') {
-        // This is a nested group, recurse
-        processTokenGroup(value, groupName, [...parentPath, key]);
-      }
-    }
-  }
-  
-  processTokenGroup(tokens, '');
-  
-  // Update metadata
-  dtcgTokens.$metadata.tokenSetOrder = tokenSets;
-  tokenSets.forEach(setName => {
-    dtcgTokens.$metadata.tokenSets[setName] = {
-      path: `tokens/${setName}.json`
-    };
-  });
-  
-  return dtcgTokens;
+
+// Export Style Dictionary tokens for a specific platform
+async function exportStyleDictionaryTokens(platform: string) {
+  const allVariables = await getAllVariables();
+  const { generateStyleDictionaryOutput } = await import('./style-dictionary-utils');
+  return await generateStyleDictionaryOutput(allVariables, platform);
 }
 
-// Export tokens in DTCG format
-async function exportDTCGTokens() {
-  const standardTokens = await exportTokens();
-  return transformToDTCG(standardTokens);
+// Get filename for platform
+function getFilenameForPlatform(platform: string): string {
+  const filenames: { [key: string]: string } = {
+    'css': 'design-tokens.css',
+    'scss': 'design-tokens.scss',
+    'js': 'design-tokens.js',
+    'ts': 'design-tokens.ts',
+    'ios': 'DesignTokens.swift',
+    'android': 'DesignTokens.kt',
+    'flutter': 'design_tokens.dart',
+    'react-native': 'DesignTokens.js',
+    'json': 'design-tokens.json'
+  };
+  
+  return filenames[platform] || 'design-tokens.json';
 }
 
 // Filter variables by selected collections
@@ -419,7 +332,7 @@ async function getAllVariables() {
   
   // Debug logging
   console.log('Categorized variables:', categorizedVariables);
-  const totalVariables = Object.values(categorizedVariables).reduce((sum, vars) => sum + vars.length, 0);
+  const totalVariables = Object.values(categorizedVariables).reduce((sum: number, vars) => sum + (vars as any[]).length, 0);
   console.log(`Total variables found: ${totalVariables}`);
   console.log('All variables:', allVariables);
   console.log('Collection names found:', Object.keys(categorizedVariables));
@@ -1204,58 +1117,6 @@ ${Object.entries(boxShadow).map(([key, value]) => `        '${key}': '${value}',
   return config;
 }
 
-// --- ENHANCED DTCG FORMAT ---
-
-// Enhanced DTCG format with themes and proper metadata
-async function exportEnhancedDTCG() {
-  const tokens = await exportTokens();
-  const collections = await figma.variables.getLocalVariableCollectionsAsync();
-  
-  const dtcgTokens: any = {
-    $metadata: {
-      tokenSetOrder: [],
-      tokenSets: {}
-    },
-    $themes: []
-  };
-  
-  // Add themes for each collection and mode
-  for (const collection of collections) {
-    for (const mode of collection.modes) {
-      const themeId = `${collection.name.toLowerCase().replace(/\s+/g, '-')}-${mode.name.toLowerCase().replace(/\s+/g, '-')}`;
-      const themeName = `${collection.name} - ${mode.name}`;
-      const groupName = collection.name;
-      
-      dtcgTokens.$themes.push({
-        id: themeId,
-        name: themeName,
-        group: groupName,
-        selectedTokenSets: {
-          [`${collection.name}/${mode.name}`]: 'enabled'
-        },
-        $figmaStyleReferences: {},
-        $figmaVariableReferences: {},
-        $figmaModeId: mode.modeId,
-        $figmaCollectionId: collection.id
-      });
-      
-      // Add to metadata
-      const tokenSetName = `${collection.name}/${mode.name}`;
-      if (!dtcgTokens.$metadata.tokenSetOrder.includes(tokenSetName)) {
-        dtcgTokens.$metadata.tokenSetOrder.push(tokenSetName);
-      }
-      
-      dtcgTokens.$metadata.tokenSets[tokenSetName] = {
-        path: `tokens/${tokenSetName}.json`
-      };
-    }
-  }
-  
-  // Add the actual tokens
-  Object.assign(dtcgTokens, tokens);
-  
-  return dtcgTokens;
-}
 
 // GitHub push functionality
 async function pushToGitHub(repoUrl: string, token: string, branch: string, path: string, content: string, filename: string) {
@@ -1338,32 +1199,23 @@ figma.ui.onmessage = async (msg) => {
       figma.notify('Error exporting tokens. See plugin console for details.', { error: true });
       console.error(error);
     }
-  } else if (msg.type === 'export-dtcg-tokens') {
+  } else if (msg.type === 'export-style-dictionary') {
     try {
       const allVariables = await getAllVariables();
       const selectedCollections = msg.selectedCollections || [];
       const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
-      const dtcgTokens = transformToDTCG(filteredVariables);
-      const jsonString = JSON.stringify(dtcgTokens, null, 2);
-      figma.ui.postMessage({ type: 'export-dtcg-complete', jsonString });
+      const platform = msg.platform || 'json';
+      const output = await exportStyleDictionaryTokens(platform);
+      figma.ui.postMessage({ 
+        type: 'export-style-dictionary-complete', 
+        output,
+        platform,
+        filename: getFilenameForPlatform(platform)
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       figma.ui.postMessage({ type: 'export-error', message: errorMessage });
-      figma.notify('Error exporting DTCG tokens. See plugin console for details.', { error: true });
-      console.error(error);
-    }
-  } else if (msg.type === 'export-enhanced-dtcg') {
-    try {
-      const allVariables = await getAllVariables();
-      const selectedCollections = msg.selectedCollections || [];
-      const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
-      const dtcgTokens = await exportEnhancedDTCG(filteredVariables);
-      const jsonString = JSON.stringify(dtcgTokens, null, 2);
-      figma.ui.postMessage({ type: 'export-enhanced-dtcg-complete', jsonString });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      figma.ui.postMessage({ type: 'export-error', message: errorMessage });
-      figma.notify('Error exporting enhanced DTCG tokens. See plugin console for details.', { error: true });
+      figma.notify('Error exporting Style Dictionary tokens. See plugin console for details.', { error: true });
       console.error(error);
     }
   } else if (msg.type === 'export-tailwind-css') {

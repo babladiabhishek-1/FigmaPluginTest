@@ -1,5 +1,38 @@
 "use strict";
 // This file holds the main code for the plugin. It has access to the Figma API.
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 // Show the plugin UI with larger size
 figma.showUI(__html__, { width: 1000, height: 600 });
 // Store previous variable state for change detection
@@ -168,155 +201,707 @@ async function exportTokens() {
     return allTokens;
 }
 // --- DTCG FORMAT TRANSFORMATION ---
-// Transform standard tokens to DTCG format
-function transformToDTCG(tokens) {
-    const dtcgTokens = {
-        $metadata: {
-            tokenSetOrder: [],
-            tokenSets: {}
-        }
+// Export Style Dictionary tokens for a specific platform
+async function exportStyleDictionaryTokens(platform) {
+    const allVariables = await getAllVariables();
+    const { generateStyleDictionaryOutput } = await Promise.resolve().then(() => __importStar(require('./style-dictionary-utils')));
+    return await generateStyleDictionaryOutput(allVariables, platform);
+}
+// Get filename for platform
+function getFilenameForPlatform(platform) {
+    const filenames = {
+        'css': 'design-tokens.css',
+        'scss': 'design-tokens.scss',
+        'js': 'design-tokens.js',
+        'ts': 'design-tokens.ts',
+        'ios': 'DesignTokens.swift',
+        'android': 'DesignTokens.kt',
+        'flutter': 'design_tokens.dart',
+        'react-native': 'DesignTokens.js',
+        'json': 'design-tokens.json'
     };
-    const tokenSets = [];
-    function processTokenGroup(group, groupName, parentPath = []) {
-        for (const [key, value] of Object.entries(group)) {
-            if (value && typeof value === 'object' && '$type' in value) {
-                // This is a token
-                const token = value;
-                const dtcgToken = {};
-                // Map token types to proper DTCG types
-                switch (token.$type) {
-                    case 'color':
-                        dtcgToken.$type = 'color';
-                        dtcgToken.$value = token.$value;
-                        break;
-                    case 'number':
-                        // Determine if it's a dimension, font size, or other number type
-                        if (key.toLowerCase().includes('size') || key.toLowerCase().includes('font')) {
-                            dtcgToken.$type = 'fontSize';
-                            dtcgToken.$value = `${token.$value}px`;
-                        }
-                        else if (key.toLowerCase().includes('line') || key.toLowerCase().includes('height')) {
-                            dtcgToken.$type = 'lineHeight';
-                            dtcgToken.$value = token.$value; // Line height is often unitless
-                        }
-                        else if (key.toLowerCase().includes('spacing') || key.toLowerCase().includes('margin') || key.toLowerCase().includes('padding')) {
-                            dtcgToken.$type = 'spacing';
-                            dtcgToken.$value = `${token.$value}px`;
-                        }
-                        else {
-                            dtcgToken.$type = 'dimension';
-                            dtcgToken.$value = `${token.$value}px`;
-                        }
-                        break;
-                    case 'text':
-                        dtcgToken.$type = 'string';
-                        dtcgToken.$value = token.$value;
-                        break;
-                    case 'boolean':
-                        dtcgToken.$type = 'boolean';
-                        dtcgToken.$value = token.$value;
-                        break;
-                    default:
-                        dtcgToken.$type = token.$type;
-                        dtcgToken.$value = token.$value;
-                }
-                // Add description if present
-                if (token.$description) {
-                    dtcgToken.$description = token.$description;
-                }
-                // Add extensions for DTCG compliance
-                dtcgToken.$extensions = {
-                    'com.figma': {
-                        hiddenFromPublishing: false,
-                        scopes: ['ALL_SCOPES']
-                    }
-                };
-                // Create proper nested structure
-                let current = dtcgTokens;
-                const fullPath = [...parentPath, key];
-                for (let i = 0; i < fullPath.length - 1; i++) {
-                    const pathKey = fullPath[i];
-                    if (!current[pathKey]) {
-                        current[pathKey] = {};
-                    }
-                    current = current[pathKey];
-                }
-                current[fullPath[fullPath.length - 1]] = dtcgToken;
-                // Track token sets for metadata
-                const tokenSetName = parentPath[0] || 'global';
-                if (!tokenSets.includes(tokenSetName)) {
-                    tokenSets.push(tokenSetName);
-                }
-            }
-            else if (value && typeof value === 'object') {
-                // This is a nested group, recurse
-                processTokenGroup(value, groupName, [...parentPath, key]);
-            }
-        }
+    return filenames[platform] || 'design-tokens.json';
+}
+// Filter variables by selected collections
+function filterVariablesByCollections(categorizedVariables, selectedCollections) {
+    if (!selectedCollections || selectedCollections.length === 0) {
+        return categorizedVariables; // Return all if no selection
     }
-    processTokenGroup(tokens, '');
-    // Update metadata
-    dtcgTokens.$metadata.tokenSetOrder = tokenSets;
-    tokenSets.forEach(setName => {
-        dtcgTokens.$metadata.tokenSets[setName] = {
-            path: `tokens/${setName}.json`
-        };
+    const filtered = {};
+    selectedCollections.forEach(collectionName => {
+        if (categorizedVariables[collectionName]) {
+            filtered[collectionName] = categorizedVariables[collectionName];
+        }
     });
-    return dtcgTokens;
+    return filtered;
 }
-// Export tokens in DTCG format
-async function exportDTCGTokens() {
-    const standardTokens = await exportTokens();
-    return transformToDTCG(standardTokens);
-}
-// Get all available variables for the side pane
+// Get all available variables for the side pane with categorization
 async function getAllVariables() {
-    const variables = [];
+    const categorizedVariables = {};
+    // Fallback: if no variables are found in categories, we'll add an "All Variables" category
+    let allVariables = [];
     try {
         // Get Figma variables
         const localVariables = await figma.variables.getLocalVariablesAsync();
         const collections = await figma.variables.getLocalVariableCollectionsAsync();
+        console.log('Found collections:', collections.map(c => c.name));
+        console.log('Found variables:', localVariables.length);
+        console.log('Collection details:', collections.map(c => ({ name: c.name, variableCount: c.variableIds.length })));
         for (const variable of localVariables) {
             const collection = collections.find(c => c.variableIds.includes(variable.id));
             const modes = collection ? collection.modes : [];
-            variables.push({
+            const variableData = {
                 id: variable.id,
                 name: variable.name,
                 type: variable.resolvedType,
                 collection: (collection === null || collection === void 0 ? void 0 : collection.name) || 'Unknown',
                 modes: modes.map(m => m.name),
                 description: variable.description || ''
-            });
+            };
+            // Add to all variables list
+            allVariables.push(variableData);
+            // Use the actual collection name from Figma
+            const collectionName = (collection === null || collection === void 0 ? void 0 : collection.name) || 'Unknown';
+            console.log(`Variable ${variable.name} assigned to collection: ${collectionName} (collection found: ${!!collection})`);
+            if (!categorizedVariables[collectionName]) {
+                categorizedVariables[collectionName] = [];
+            }
+            categorizedVariables[collectionName].push(variableData);
         }
         // Get paint styles
         const paintStyles = await figma.getLocalPaintStylesAsync();
         for (const style of paintStyles) {
-            variables.push({
+            const styleData = {
                 id: style.id,
                 name: style.name,
                 type: 'PAINT_STYLE',
                 collection: 'Paint Styles',
                 modes: ['Default'],
                 description: style.description || ''
-            });
+            };
+            // Add to all variables list
+            allVariables.push(styleData);
+            // Group paint styles by collection
+            const collectionName = 'Paint Styles';
+            if (!categorizedVariables[collectionName]) {
+                categorizedVariables[collectionName] = [];
+            }
+            categorizedVariables[collectionName].push(styleData);
         }
         // Get text styles
         const textStyles = await figma.getLocalTextStylesAsync();
         for (const style of textStyles) {
-            variables.push({
+            const styleData = {
                 id: style.id,
                 name: style.name,
                 type: 'TEXT_STYLE',
                 collection: 'Text Styles',
                 modes: ['Default'],
                 description: style.description || ''
-            });
+            };
+            // Add to all variables list
+            allVariables.push(styleData);
+            // Group text styles by collection
+            const collectionName = 'Text Styles';
+            if (!categorizedVariables[collectionName]) {
+                categorizedVariables[collectionName] = [];
+            }
+            categorizedVariables[collectionName].push(styleData);
         }
     }
     catch (error) {
         console.error('Error getting variables:', error);
     }
-    return variables;
+    // Debug logging
+    console.log('Categorized variables:', categorizedVariables);
+    const totalVariables = Object.values(categorizedVariables).reduce((sum, vars) => sum + vars.length, 0);
+    console.log(`Total variables found: ${totalVariables}`);
+    console.log('All variables:', allVariables);
+    console.log('Collection names found:', Object.keys(categorizedVariables));
+    console.log('Total variables in allVariables array:', allVariables.length);
+    // If no variables were categorized, show them all in an "All Variables" category
+    if (totalVariables === 0 && allVariables.length > 0) {
+        console.log('No variables categorized, showing all in "All Variables" category');
+        console.log('This means categorizedVariables is empty but allVariables has items');
+        return {
+            'All Variables': allVariables
+        };
+    }
+    // Sort categories alphabetically for better organization
+    const sortedCategories = {};
+    Object.keys(categorizedVariables).sort().forEach(key => {
+        sortedCategories[key] = categorizedVariables[key];
+    });
+    console.log('Returning categorized variables:', sortedCategories);
+    return sortedCategories;
+}
+// Helper function to categorize variables based on type and name patterns
+// Note: This function is no longer used as we now group by collection names
+function categorizeVariable(variable) {
+    // This function is deprecated - we now group by collection names instead
+    return 'Other';
+}
+// --- PLATFORM EXPORT FORMATS ---
+// Export tokens in Swift/iOS format
+async function exportSwiftTokens() {
+    const tokens = await exportTokens();
+    let swiftCode = `// Design Tokens for iOS/Swift
+// Generated from Figma
+
+import Foundation
+
+// MARK: - Color Tokens
+struct ColorTokens {
+`;
+    const colors = {};
+    const spacing = {};
+    const typography = {};
+    const sizes = {};
+    function processTokens(obj, prefix = '') {
+        for (const [key, value] of Object.entries(obj)) {
+            if (value && typeof value === 'object' && '$type' in value) {
+                const token = value;
+                const tokenName = `${prefix}${key}`.replace(/[^a-zA-Z0-9]/g, '').replace(/^[0-9]/, '_$&');
+                switch (token.$type) {
+                    case 'color':
+                        colors[tokenName] = token.$value;
+                        break;
+                    case 'dimension':
+                    case 'spacing':
+                        if (key.toLowerCase().includes('font') || key.toLowerCase().includes('size')) {
+                            typography[tokenName] = token.$value;
+                        }
+                        else {
+                            spacing[tokenName] = token.$value;
+                        }
+                        break;
+                    case 'fontSize':
+                        typography[tokenName] = token.$value;
+                        break;
+                    case 'fontFamily':
+                        typography[tokenName] = token.$value;
+                        break;
+                    default:
+                        sizes[tokenName] = token.$value;
+                }
+            }
+            else if (value && typeof value === 'object') {
+                processTokens(value, `${prefix}${key}`);
+            }
+        }
+    }
+    processTokens(tokens);
+    // Generate color tokens
+    if (Object.keys(colors).length > 0) {
+        swiftCode += `
+    // Color Tokens
+`;
+        Object.entries(colors).forEach(([key, value]) => {
+            const hexColor = value;
+            const r = parseInt(hexColor.slice(1, 3), 16) / 255;
+            const g = parseInt(hexColor.slice(3, 5), 16) / 255;
+            const b = parseInt(hexColor.slice(5, 7), 16) / 255;
+            swiftCode += `    static let ${key} = UIColor(red: ${r}, green: ${g}, blue: ${b}, alpha: 1.0)\n`;
+        });
+    }
+    // Generate spacing tokens
+    if (Object.keys(spacing).length > 0) {
+        swiftCode += `
+}
+
+// MARK: - Spacing Tokens
+struct SpacingTokens {
+`;
+        Object.entries(spacing).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            swiftCode += `    static let ${key}: CGFloat = ${numValue}\n`;
+        });
+    }
+    // Generate typography tokens
+    if (Object.keys(typography).length > 0) {
+        swiftCode += `
+}
+
+// MARK: - Typography Tokens
+struct TypographyTokens {
+`;
+        Object.entries(typography).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            swiftCode += `    static let ${key}: CGFloat = ${numValue}\n`;
+        });
+    }
+    // Generate size tokens
+    if (Object.keys(sizes).length > 0) {
+        swiftCode += `
+}
+
+// MARK: - Size Tokens
+struct SizeTokens {
+`;
+        Object.entries(sizes).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            swiftCode += `    static let ${key}: CGFloat = ${numValue}\n`;
+        });
+    }
+    swiftCode += `
+}`;
+    return swiftCode;
+}
+// Export tokens in Kotlin/Android format
+async function exportKotlinTokens() {
+    const tokens = await exportTokens();
+    let kotlinCode = `// Design Tokens for Android/Kotlin
+// Generated from Figma
+
+package com.yourpackage.tokens
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+// MARK: - Color Tokens
+object ColorTokens {
+`;
+    const colors = {};
+    const spacing = {};
+    const typography = {};
+    const sizes = {};
+    function processTokens(obj, prefix = '') {
+        for (const [key, value] of Object.entries(obj)) {
+            if (value && typeof value === 'object' && '$type' in value) {
+                const token = value;
+                const tokenName = `${prefix}${key}`.replace(/[^a-zA-Z0-9]/g, '').replace(/^[0-9]/, '_$&');
+                switch (token.$type) {
+                    case 'color':
+                        colors[tokenName] = token.$value;
+                        break;
+                    case 'dimension':
+                    case 'spacing':
+                        if (key.toLowerCase().includes('font') || key.toLowerCase().includes('size')) {
+                            typography[tokenName] = token.$value;
+                        }
+                        else {
+                            spacing[tokenName] = token.$value;
+                        }
+                        break;
+                    case 'fontSize':
+                        typography[tokenName] = token.$value;
+                        break;
+                    case 'fontFamily':
+                        typography[tokenName] = token.$value;
+                        break;
+                    default:
+                        sizes[tokenName] = token.$value;
+                }
+            }
+            else if (value && typeof value === 'object') {
+                processTokens(value, `${prefix}${key}`);
+            }
+        }
+    }
+    processTokens(tokens);
+    // Generate color tokens
+    if (Object.keys(colors).length > 0) {
+        Object.entries(colors).forEach(([key, value]) => {
+            const hexColor = value;
+            const r = parseInt(hexColor.slice(1, 3), 16);
+            const g = parseInt(hexColor.slice(3, 5), 16);
+            const b = parseInt(hexColor.slice(5, 7), 16);
+            kotlinCode += `    val ${key} = Color(0xFF${hexColor.slice(1).toUpperCase()})\n`;
+        });
+    }
+    // Generate spacing tokens
+    if (Object.keys(spacing).length > 0) {
+        kotlinCode += `
+}
+
+// MARK: - Spacing Tokens
+object SpacingTokens {
+`;
+        Object.entries(spacing).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            kotlinCode += `    val ${key} = ${numValue}.dp\n`;
+        });
+    }
+    // Generate typography tokens
+    if (Object.keys(typography).length > 0) {
+        kotlinCode += `
+}
+
+// MARK: - Typography Tokens
+object TypographyTokens {
+`;
+        Object.entries(typography).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            kotlinCode += `    val ${key} = ${numValue}.sp\n`;
+        });
+    }
+    // Generate size tokens
+    if (Object.keys(sizes).length > 0) {
+        kotlinCode += `
+}
+
+// MARK: - Size Tokens
+object SizeTokens {
+`;
+        Object.entries(sizes).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            kotlinCode += `    val ${key} = ${numValue}.dp\n`;
+        });
+    }
+    kotlinCode += `
+}`;
+    return kotlinCode;
+}
+// Export tokens in React/JavaScript format
+async function exportReactTokens() {
+    const tokens = await exportTokens();
+    let reactCode = `// Design Tokens for React/JavaScript
+// Generated from Figma
+
+export const tokens = {
+`;
+    const colors = {};
+    const spacing = {};
+    const typography = {};
+    const sizes = {};
+    function processTokens(obj, prefix = '') {
+        for (const [key, value] of Object.entries(obj)) {
+            if (value && typeof value === 'object' && '$type' in value) {
+                const token = value;
+                const tokenName = `${prefix}${key}`.replace(/[^a-zA-Z0-9]/g, '').replace(/^[0-9]/, '_$&');
+                switch (token.$type) {
+                    case 'color':
+                        colors[tokenName] = token.$value;
+                        break;
+                    case 'dimension':
+                    case 'spacing':
+                        if (key.toLowerCase().includes('font') || key.toLowerCase().includes('size')) {
+                            typography[tokenName] = token.$value;
+                        }
+                        else {
+                            spacing[tokenName] = token.$value;
+                        }
+                        break;
+                    case 'fontSize':
+                        typography[tokenName] = token.$value;
+                        break;
+                    case 'fontFamily':
+                        typography[tokenName] = token.$value;
+                        break;
+                    default:
+                        sizes[tokenName] = token.$value;
+                }
+            }
+            else if (value && typeof value === 'object') {
+                processTokens(value, `${prefix}${key}`);
+            }
+        }
+    }
+    processTokens(tokens);
+    // Generate color tokens
+    if (Object.keys(colors).length > 0) {
+        reactCode += `  colors: {
+`;
+        Object.entries(colors).forEach(([key, value]) => {
+            reactCode += `    ${key}: '${value}',\n`;
+        });
+        reactCode += `  },\n`;
+    }
+    // Generate spacing tokens
+    if (Object.keys(spacing).length > 0) {
+        reactCode += `  spacing: {
+`;
+        Object.entries(spacing).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            reactCode += `    ${key}: '${numValue}px',\n`;
+        });
+        reactCode += `  },\n`;
+    }
+    // Generate typography tokens
+    if (Object.keys(typography).length > 0) {
+        reactCode += `  typography: {
+`;
+        Object.entries(typography).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            reactCode += `    ${key}: '${numValue}px',\n`;
+        });
+        reactCode += `  },\n`;
+    }
+    // Generate size tokens
+    if (Object.keys(sizes).length > 0) {
+        reactCode += `  sizes: {
+`;
+        Object.entries(sizes).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            reactCode += `    ${key}: '${numValue}px',\n`;
+        });
+        reactCode += `  },\n`;
+    }
+    reactCode += `};
+
+export default tokens;`;
+    return reactCode;
+}
+// Export tokens in CSS custom properties format
+async function exportCSSTokens() {
+    const tokens = await exportTokens();
+    let cssCode = `/* Design Tokens for CSS Custom Properties */
+/* Generated from Figma */
+
+:root {
+`;
+    const colors = {};
+    const spacing = {};
+    const typography = {};
+    const sizes = {};
+    function processTokens(obj, prefix = '') {
+        for (const [key, value] of Object.entries(obj)) {
+            if (value && typeof value === 'object' && '$type' in value) {
+                const token = value;
+                const tokenName = `${prefix}${key}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                switch (token.$type) {
+                    case 'color':
+                        colors[tokenName] = token.$value;
+                        break;
+                    case 'dimension':
+                    case 'spacing':
+                        if (key.toLowerCase().includes('font') || key.toLowerCase().includes('size')) {
+                            typography[tokenName] = token.$value;
+                        }
+                        else {
+                            spacing[tokenName] = token.$value;
+                        }
+                        break;
+                    case 'fontSize':
+                        typography[tokenName] = token.$value;
+                        break;
+                    case 'fontFamily':
+                        typography[tokenName] = token.$value;
+                        break;
+                    default:
+                        sizes[tokenName] = token.$value;
+                }
+            }
+            else if (value && typeof value === 'object') {
+                processTokens(value, `${prefix}${key}-`);
+            }
+        }
+    }
+    processTokens(tokens);
+    // Generate color tokens
+    if (Object.keys(colors).length > 0) {
+        cssCode += `  /* Color Tokens */\n`;
+        Object.entries(colors).forEach(([key, value]) => {
+            cssCode += `  --color-${key}: ${value};\n`;
+        });
+    }
+    // Generate spacing tokens
+    if (Object.keys(spacing).length > 0) {
+        cssCode += `  /* Spacing Tokens */\n`;
+        Object.entries(spacing).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            cssCode += `  --spacing-${key}: ${numValue}px;\n`;
+        });
+    }
+    // Generate typography tokens
+    if (Object.keys(typography).length > 0) {
+        cssCode += `  /* Typography Tokens */\n`;
+        Object.entries(typography).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            cssCode += `  --font-${key}: ${numValue}px;\n`;
+        });
+    }
+    // Generate size tokens
+    if (Object.keys(sizes).length > 0) {
+        cssCode += `  /* Size Tokens */\n`;
+        Object.entries(sizes).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            cssCode += `  --size-${key}: ${numValue}px;\n`;
+        });
+    }
+    cssCode += `}`;
+    return cssCode;
+}
+// Export tokens in SCSS variables format
+async function exportSCSSTokens() {
+    const tokens = await exportTokens();
+    let scssCode = `// Design Tokens for SCSS Variables
+// Generated from Figma
+
+`;
+    const colors = {};
+    const spacing = {};
+    const typography = {};
+    const sizes = {};
+    function processTokens(obj, prefix = '') {
+        for (const [key, value] of Object.entries(obj)) {
+            if (value && typeof value === 'object' && '$type' in value) {
+                const token = value;
+                const tokenName = `${prefix}${key}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                switch (token.$type) {
+                    case 'color':
+                        colors[tokenName] = token.$value;
+                        break;
+                    case 'dimension':
+                    case 'spacing':
+                        if (key.toLowerCase().includes('font') || key.toLowerCase().includes('size')) {
+                            typography[tokenName] = token.$value;
+                        }
+                        else {
+                            spacing[tokenName] = token.$value;
+                        }
+                        break;
+                    case 'fontSize':
+                        typography[tokenName] = token.$value;
+                        break;
+                    case 'fontFamily':
+                        typography[tokenName] = token.$value;
+                        break;
+                    default:
+                        sizes[tokenName] = token.$value;
+                }
+            }
+            else if (value && typeof value === 'object') {
+                processTokens(value, `${prefix}${key}-`);
+            }
+        }
+    }
+    processTokens(tokens);
+    // Generate color tokens
+    if (Object.keys(colors).length > 0) {
+        scssCode += `// Color Tokens\n`;
+        Object.entries(colors).forEach(([key, value]) => {
+            scssCode += `$color-${key}: ${value};\n`;
+        });
+        scssCode += `\n`;
+    }
+    // Generate spacing tokens
+    if (Object.keys(spacing).length > 0) {
+        scssCode += `// Spacing Tokens\n`;
+        Object.entries(spacing).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            scssCode += `$spacing-${key}: ${numValue}px;\n`;
+        });
+        scssCode += `\n`;
+    }
+    // Generate typography tokens
+    if (Object.keys(typography).length > 0) {
+        scssCode += `// Typography Tokens\n`;
+        Object.entries(typography).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            scssCode += `$font-${key}: ${numValue}px;\n`;
+        });
+        scssCode += `\n`;
+    }
+    // Generate size tokens
+    if (Object.keys(sizes).length > 0) {
+        scssCode += `// Size Tokens\n`;
+        Object.entries(sizes).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            scssCode += `$size-${key}: ${numValue}px;\n`;
+        });
+        scssCode += `\n`;
+    }
+    return scssCode;
+}
+// Export tokens in Flutter/Dart format
+async function exportFlutterTokens() {
+    const tokens = await exportTokens();
+    let flutterCode = `// Design Tokens for Flutter/Dart
+// Generated from Figma
+
+import 'package:flutter/material.dart';
+
+class DesignTokens {
+`;
+    const colors = {};
+    const spacing = {};
+    const typography = {};
+    const sizes = {};
+    function processTokens(obj, prefix = '') {
+        for (const [key, value] of Object.entries(obj)) {
+            if (value && typeof value === 'object' && '$type' in value) {
+                const token = value;
+                const tokenName = `${prefix}${key}`.replace(/[^a-zA-Z0-9]/g, '').replace(/^[0-9]/, '_$&');
+                switch (token.$type) {
+                    case 'color':
+                        colors[tokenName] = token.$value;
+                        break;
+                    case 'dimension':
+                    case 'spacing':
+                        if (key.toLowerCase().includes('font') || key.toLowerCase().includes('size')) {
+                            typography[tokenName] = token.$value;
+                        }
+                        else {
+                            spacing[tokenName] = token.$value;
+                        }
+                        break;
+                    case 'fontSize':
+                        typography[tokenName] = token.$value;
+                        break;
+                    case 'fontFamily':
+                        typography[tokenName] = token.$value;
+                        break;
+                    default:
+                        sizes[tokenName] = token.$value;
+                }
+            }
+            else if (value && typeof value === 'object') {
+                processTokens(value, `${prefix}${key}`);
+            }
+        }
+    }
+    processTokens(tokens);
+    // Generate color tokens
+    if (Object.keys(colors).length > 0) {
+        flutterCode += `  // Color Tokens
+  static const Map<String, Color> colors = {
+`;
+        Object.entries(colors).forEach(([key, value]) => {
+            const hexColor = value;
+            const r = parseInt(hexColor.slice(1, 3), 16);
+            const g = parseInt(hexColor.slice(3, 5), 16);
+            const b = parseInt(hexColor.slice(5, 7), 16);
+            flutterCode += `    '${key}': Color(0xFF${hexColor.slice(1).toUpperCase()}),\n`;
+        });
+        flutterCode += `  };\n\n`;
+    }
+    // Generate spacing tokens
+    if (Object.keys(spacing).length > 0) {
+        flutterCode += `  // Spacing Tokens
+  static const Map<String, double> spacing = {
+`;
+        Object.entries(spacing).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            flutterCode += `    '${key}': ${numValue},\n`;
+        });
+        flutterCode += `  };\n\n`;
+    }
+    // Generate typography tokens
+    if (Object.keys(typography).length > 0) {
+        flutterCode += `  // Typography Tokens
+  static const Map<String, double> typography = {
+`;
+        Object.entries(typography).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            flutterCode += `    '${key}': ${numValue},\n`;
+        });
+        flutterCode += `  };\n\n`;
+    }
+    // Generate size tokens
+    if (Object.keys(sizes).length > 0) {
+        flutterCode += `  // Size Tokens
+  static const Map<String, double> sizes = {
+`;
+        Object.entries(sizes).forEach(([key, value]) => {
+            const numValue = typeof value === 'string' ? parseFloat(value.replace('px', '')) : value;
+            flutterCode += `    '${key}': ${numValue},\n`;
+        });
+        flutterCode += `  };\n\n`;
+    }
+    flutterCode += `}`;
+    return flutterCode;
 }
 // --- TAILWIND CSS FORMAT ---
 // Export tokens in Tailwind CSS format
@@ -442,50 +1027,6 @@ ${Object.entries(boxShadow).map(([key, value]) => `        '${key}': '${value}',
 }`;
     return config;
 }
-// --- ENHANCED DTCG FORMAT ---
-// Enhanced DTCG format with themes and proper metadata
-async function exportEnhancedDTCG() {
-    const tokens = await exportTokens();
-    const collections = await figma.variables.getLocalVariableCollectionsAsync();
-    const dtcgTokens = {
-        $metadata: {
-            tokenSetOrder: [],
-            tokenSets: {}
-        },
-        $themes: []
-    };
-    // Add themes for each collection and mode
-    for (const collection of collections) {
-        for (const mode of collection.modes) {
-            const themeId = `${collection.name.toLowerCase().replace(/\s+/g, '-')}-${mode.name.toLowerCase().replace(/\s+/g, '-')}`;
-            const themeName = `${collection.name} - ${mode.name}`;
-            const groupName = collection.name;
-            dtcgTokens.$themes.push({
-                id: themeId,
-                name: themeName,
-                group: groupName,
-                selectedTokenSets: {
-                    [`${collection.name}/${mode.name}`]: 'enabled'
-                },
-                $figmaStyleReferences: {},
-                $figmaVariableReferences: {},
-                $figmaModeId: mode.modeId,
-                $figmaCollectionId: collection.id
-            });
-            // Add to metadata
-            const tokenSetName = `${collection.name}/${mode.name}`;
-            if (!dtcgTokens.$metadata.tokenSetOrder.includes(tokenSetName)) {
-                dtcgTokens.$metadata.tokenSetOrder.push(tokenSetName);
-            }
-            dtcgTokens.$metadata.tokenSets[tokenSetName] = {
-                path: `tokens/${tokenSetName}.json`
-            };
-        }
-    }
-    // Add the actual tokens
-    Object.assign(dtcgTokens, tokens);
-    return dtcgTokens;
-}
 // GitHub push functionality
 async function pushToGitHub(repoUrl, token, branch, path, content, filename) {
     try {
@@ -551,8 +1092,10 @@ async function pushToGitHub(repoUrl, token, branch, path, content, filename) {
 figma.ui.onmessage = async (msg) => {
     if (msg.type === 'export-tokens') {
         try {
-            const tokens = await exportTokens();
-            const jsonString = JSON.stringify(tokens, null, 2);
+            const allVariables = await getAllVariables();
+            const selectedCollections = msg.selectedCollections || [];
+            const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+            const jsonString = JSON.stringify(filteredVariables, null, 2);
             figma.ui.postMessage({ type: 'export-complete', jsonString });
         }
         catch (error) {
@@ -562,29 +1105,24 @@ figma.ui.onmessage = async (msg) => {
             console.error(error);
         }
     }
-    else if (msg.type === 'export-dtcg-tokens') {
+    else if (msg.type === 'export-style-dictionary') {
         try {
-            const dtcgTokens = await exportDTCGTokens();
-            const jsonString = JSON.stringify(dtcgTokens, null, 2);
-            figma.ui.postMessage({ type: 'export-dtcg-complete', jsonString });
+            const allVariables = await getAllVariables();
+            const selectedCollections = msg.selectedCollections || [];
+            const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+            const platform = msg.platform || 'json';
+            const output = await exportStyleDictionaryTokens(platform);
+            figma.ui.postMessage({
+                type: 'export-style-dictionary-complete',
+                output,
+                platform,
+                filename: getFilenameForPlatform(platform)
+            });
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
             figma.ui.postMessage({ type: 'export-error', message: errorMessage });
-            figma.notify('Error exporting DTCG tokens. See plugin console for details.', { error: true });
-            console.error(error);
-        }
-    }
-    else if (msg.type === 'export-enhanced-dtcg') {
-        try {
-            const dtcgTokens = await exportEnhancedDTCG();
-            const jsonString = JSON.stringify(dtcgTokens, null, 2);
-            figma.ui.postMessage({ type: 'export-enhanced-dtcg-complete', jsonString });
-        }
-        catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            figma.ui.postMessage({ type: 'export-error', message: errorMessage });
-            figma.notify('Error exporting enhanced DTCG tokens. See plugin console for details.', { error: true });
+            figma.notify('Error exporting Style Dictionary tokens. See plugin console for details.', { error: true });
             console.error(error);
         }
     }
@@ -614,13 +1152,15 @@ figma.ui.onmessage = async (msg) => {
     }
     else if (msg.type === 'get-variables') {
         try {
+            console.log('Getting variables...');
             const variables = await getAllVariables();
+            console.log('Variables retrieved, sending to UI:', variables);
             figma.ui.postMessage({ type: 'variables-loaded', variables });
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            console.error('Error getting variables:', error);
             figma.ui.postMessage({ type: 'export-error', message: errorMessage });
-            console.error(error);
         }
     }
 };
