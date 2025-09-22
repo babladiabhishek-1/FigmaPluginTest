@@ -2101,19 +2101,31 @@ function transformToTokenStudio(tokens: any): any {
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'export-tokens') {
     try {
+      console.log('Starting export-tokens...');
       const allVariables = await getAllVariables();
+      console.log('Got variables:', Object.keys(allVariables));
+      
       const selectedCollections = msg.selectedCollections || [];
+      console.log('Selected collections:', selectedCollections);
+      
       const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+      console.log('Filtered variables:', Object.keys(filteredVariables));
       
       // Transform to Token Studio format
+      console.log('Starting Token Studio transformation...');
       const tokenStudioFormat = transformToTokenStudio(filteredVariables);
+      console.log('Token Studio transformation complete:', Object.keys(tokenStudioFormat));
+      
       const jsonString = JSON.stringify(tokenStudioFormat, null, 2);
+      console.log('JSON stringified, length:', jsonString.length);
+      
       figma.ui.postMessage({ type: 'export-complete', jsonString });
+      console.log('Message sent to UI');
     } catch (error) {
+      console.error('Error in export-tokens:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       figma.ui.postMessage({ type: 'export-error', message: errorMessage });
       figma.notify('Error exporting tokens. See plugin console for details.', { error: true });
-      console.error(error);
     }
   } else if (msg.type === 'export-style-dictionary') {
     try {

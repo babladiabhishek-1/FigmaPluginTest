@@ -1305,6 +1305,11 @@
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
         status.textContent = 'Token Studio format exported successfully!';
+      } else if (message.type === 'export-error') {
+        output.value = `Error: ${message.message}`;
+        copyBtn.disabled = true;
+        downloadBtn.disabled = true;
+        status.textContent = 'Export failed!';
       } else if (message.type === 'export-style-dictionary-complete') {
         output.value = message.output;
         copyBtn.disabled = false;
