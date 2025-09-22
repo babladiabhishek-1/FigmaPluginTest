@@ -484,6 +484,91 @@
       font-size: 14px;
       color: #666;
     }
+
+    /* Color Palette Styles */
+    .color-palette-container {
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      background: #fff;
+      margin-bottom: 16px;
+    }
+
+    .color-palette {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      padding: 16px;
+    }
+
+    .color-swatch {
+      display: flex;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      background: #fff;
+      transition: all 0.2s ease;
+    }
+
+    .color-swatch:hover {
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transform: translateY(-1px);
+    }
+
+    .color-preview {
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+
+    .color-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .color-name {
+      font-weight: 600;
+      font-size: 13px;
+      color: #333;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .color-value {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 11px;
+      color: #666;
+      background: #f5f5f5;
+      padding: 2px 6px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .color-category {
+      font-size: 12px;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    .color-group {
+      margin-bottom: 20px;
+    }
+
+    .color-group-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #f0f0f0;
+    }
   </style>
 </head>
 <body>
@@ -517,6 +602,7 @@
       <button class="tab-btn active" data-tab="standard">Standard</button>
       <button class="tab-btn" data-tab="dtcg">Style Dictionary</button>
       <button class="tab-btn" data-tab="tailwind">Tailwind</button>
+      <button class="tab-btn" data-tab="colors">Check Colors</button>
       <button class="tab-btn" data-tab="github">GitHub</button>
     </div>
 
@@ -557,6 +643,20 @@
         <div class="format-info">Tailwind CSS configuration file for modern web development</div>
         <div class="export-actions">
           <button id="export-tailwind-css-btn" class="btn btn-primary">Export Tailwind Config</button>
+        </div>
+      </div>
+
+      <!-- Check Colors Tab -->
+      <div id="colors-tab" class="tab-content">
+        <div class="format-info">Visual color palette with swatches and hex values for easy review</div>
+        <div class="color-palette-container">
+          <div id="color-palette" class="color-palette">
+            <!-- Color swatches will be dynamically generated here -->
+          </div>
+        </div>
+        <div class="export-actions">
+          <button id="refresh-colors-btn" class="btn btn-secondary">Refresh Colors</button>
+          <button id="export-colors-btn" class="btn btn-primary">Export Color Palette</button>
         </div>
       </div>
 
@@ -730,6 +830,79 @@
         } 
       }, '*');
     };
+
+    // Color palette functionality
+    const refreshColorsBtn = document.getElementById('refresh-colors-btn');
+    const exportColorsBtn = document.getElementById('export-colors-btn');
+    const colorPalette = document.getElementById('color-palette');
+
+    refreshColorsBtn.onclick = () => {
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'get-colors',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
+    };
+
+    exportColorsBtn.onclick = () => {
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-colors',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
+    };
+
+    // Function to render color palette
+    function renderColorPalette(colors) {
+      colorPalette.innerHTML = '';
+      
+      Object.entries(colors).forEach(([category, colorGroup]) => {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'color-group';
+        
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'color-group-title';
+        titleDiv.textContent = category;
+        groupDiv.appendChild(titleDiv);
+        
+        const colorsDiv = document.createElement('div');
+        colorsDiv.style.display = 'grid';
+        colorsDiv.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+        colorsDiv.style.gap = '12px';
+        
+        Object.entries(colorGroup).forEach(([colorName, colorData]) => {
+          const swatchDiv = document.createElement('div');
+          swatchDiv.className = 'color-swatch';
+          
+          const previewDiv = document.createElement('div');
+          previewDiv.className = 'color-preview';
+          previewDiv.style.backgroundColor = colorData.value || '#ccc';
+          
+          const infoDiv = document.createElement('div');
+          infoDiv.className = 'color-info';
+          
+          const nameDiv = document.createElement('div');
+          nameDiv.className = 'color-name';
+          nameDiv.textContent = colorName;
+          
+          const valueDiv = document.createElement('div');
+          valueDiv.className = 'color-value';
+          valueDiv.textContent = colorData.value || 'No value';
+          
+          infoDiv.appendChild(nameDiv);
+          infoDiv.appendChild(valueDiv);
+          
+          swatchDiv.appendChild(previewDiv);
+          swatchDiv.appendChild(infoDiv);
+          colorsDiv.appendChild(swatchDiv);
+        });
+        
+        groupDiv.appendChild(colorsDiv);
+        colorPalette.appendChild(groupDiv);
+      });
+    }
 
 
     // Refresh variables
@@ -1087,6 +1260,18 @@
         copyBtn.disabled = true;
         downloadBtn.disabled = true;
         status.textContent = 'Export failed!';
+      } else if (message.type === 'colors-loaded') {
+        renderColorPalette(message.colors);
+      } else if (message.type === 'export-colors-complete') {
+        output.value = message.output;
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
+        status.textContent = 'Color palette exported successfully!';
+        
+        // Update download button with correct filename
+        if (downloadBtn) {
+          downloadBtn.setAttribute('data-filename', message.filename || 'color-palette.json');
+        }
       }
     };
   </script>

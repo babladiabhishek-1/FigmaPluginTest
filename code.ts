@@ -1650,6 +1650,119 @@ async function pushToGitHub(repoUrl: string, token: string, branch: string, path
   }
 }
 
+// Extract colors from variables for the color palette
+function extractColors(variables: any): any {
+  const colors: any = {};
+  
+  Object.entries(variables).forEach(([collectionName, variables]: [string, any]) => {
+    if (collectionName === 'Umain-colors') {
+      // Handle color collections
+      colors[`${collectionName}/Value`] = {};
+      
+      (variables as any[]).forEach((variable: any) => {
+        if (variable.type === 'COLOR' && variable.value) {
+          const nameParts = variable.name.split('/');
+          if (nameParts.length >= 2) {
+            const colorFamily = nameParts[0];
+            const colorShade = nameParts[1];
+            
+            if (!colors[`${collectionName}/Value`][colorFamily]) {
+              colors[`${collectionName}/Value`][colorFamily] = {};
+            }
+            
+            // Convert RGBA to hex if needed
+            let colorValue = variable.value;
+            if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+              const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+              if (rgbaMatch) {
+                const r = parseInt(rgbaMatch[1]);
+                const g = parseInt(rgbaMatch[2]);
+                const b = parseInt(rgbaMatch[3]);
+                const a = parseFloat(rgbaMatch[4]);
+                
+                if (a === 1) {
+                  colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                }
+              }
+            }
+            
+            colors[`${collectionName}/Value`][colorFamily][colorShade] = {
+              value: colorValue,
+              type: 'color',
+              description: variable.description || ''
+            };
+          }
+        }
+      });
+    } else if (collectionName === 'Umain - semantic Colors') {
+      // Handle semantic colors
+      (variables as any[]).forEach((variable: any) => {
+        if (variable.type === 'COLOR' && variable.value) {
+          const nameParts = variable.name.split('/');
+          if (nameParts.length >= 2) {
+            const category = nameParts[0];
+            const subcategory = nameParts[1];
+            
+            const mode = variable.modes && variable.modes.includes('Light') ? 'Light' : 'Dark';
+            const key = `${collectionName}/${mode}`;
+            
+            if (!colors[key]) {
+              colors[key] = {};
+            }
+            if (!colors[key][category]) {
+              colors[key][category] = {};
+            }
+            
+            // Convert RGBA to hex if needed
+            let colorValue = variable.value;
+            if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+              const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+              if (rgbaMatch) {
+                const r = parseInt(rgbaMatch[1]);
+                const g = parseInt(rgbaMatch[2]);
+                const b = parseInt(rgbaMatch[3]);
+                const a = parseFloat(rgbaMatch[4]);
+                
+                if (a === 1) {
+                  colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                }
+              }
+            }
+            
+            colors[key][category][subcategory] = {
+              value: colorValue,
+              type: 'color',
+              description: variable.description || ''
+            };
+          }
+        }
+      });
+    } else if (collectionName === 'Umain - component tokens') {
+      // Handle component color tokens
+      if (!colors[collectionName]) {
+        colors[collectionName] = {};
+      }
+      
+      (variables as any[]).forEach((variable: any) => {
+        if (variable.type === 'COLOR' && variable.value) {
+          colors[collectionName][variable.name] = {
+            value: variable.value,
+            type: 'color',
+            description: variable.description || ''
+          };
+        }
+      });
+    }
+  });
+  
+  return colors;
+}
+
+// Generate color palette export
+function generateColorPalette(colors: any): string {
+  return JSON.stringify(colors, null, 2);
+}
+
 // Listen for messages from the UI
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'export-tokens') {
@@ -1695,6 +1808,37 @@ figma.ui.onmessage = async (msg) => {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       figma.ui.postMessage({ type: 'export-error', message: errorMessage });
       figma.notify('Error exporting Tailwind CSS. See plugin console for details.', { error: true });
+      console.error(error);
+    }
+  } else if (msg.type === 'get-colors') {
+    try {
+      const allVariables = await getAllVariables();
+      const selectedCollections = msg.selectedCollections || [];
+      const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+      const colors = extractColors(filteredVariables);
+      figma.ui.postMessage({ type: 'colors-loaded', colors });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      figma.ui.postMessage({ type: 'export-error', message: errorMessage });
+      figma.notify('Error loading colors. See plugin console for details.', { error: true });
+      console.error(error);
+    }
+  } else if (msg.type === 'export-colors') {
+    try {
+      const allVariables = await getAllVariables();
+      const selectedCollections = msg.selectedCollections || [];
+      const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+      const colors = extractColors(filteredVariables);
+      const colorPalette = generateColorPalette(colors);
+      figma.ui.postMessage({ 
+        type: 'export-colors-complete', 
+        output: colorPalette,
+        filename: 'color-palette.json'
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      figma.ui.postMessage({ type: 'export-error', message: errorMessage });
+      figma.notify('Error exporting color palette. See plugin console for details.', { error: true });
       console.error(error);
     }
   } else if (msg.type === 'push-to-github') {
