@@ -1671,6 +1671,8 @@ function generateColorPalette(colors: any): string {
 
 // Transform to Token Studio format
 function transformToTokenStudio(tokens: any): any {
+  console.log('transformToTokenStudio called with tokens:', Object.keys(tokens));
+  
   const tokenStudio: any = {
     $themes: [],
     $metadata: {
@@ -1681,6 +1683,9 @@ function transformToTokenStudio(tokens: any): any {
   // Step 1: Create primitive color palette
   const primitiveColors: any = {};
   Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
+    console.log('Processing collection:', collectionName);
+    
+    // Look for Umain-colors/Value or create it from Paint Styles
     if (collectionName === 'Umain-colors/Value') {
       primitiveColors[collectionName] = {};
       
@@ -1719,6 +1724,49 @@ function transformToTokenStudio(tokens: any): any {
             value: colorValue,
             type: 'color'
           };
+        }
+      });
+    } else if (collectionName === 'Paint Styles') {
+      // Create primitive colors from Paint Styles
+      primitiveColors['Umain-colors/Value'] = {};
+      
+      (variables as any[]).forEach((variable: any) => {
+        if (variable.name && variable.name.startsWith('Umain - colors/')) {
+          const nameParts = variable.name.split('/');
+          if (nameParts.length >= 3) {
+            const colorFamily = nameParts[1]; // e.g., "Greyscale"
+            const colorShade = nameParts[2];  // e.g., "900"
+            
+            if (!primitiveColors['Umain-colors/Value'][colorFamily]) {
+              primitiveColors['Umain-colors/Value'][colorFamily] = {};
+            }
+            
+            // Convert rgba to 8-digit hex format
+            let colorValue = variable.value;
+            if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+              const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+              if (rgbaMatch) {
+                const r = parseInt(rgbaMatch[1]);
+                const g = parseInt(rgbaMatch[2]);
+                const b = parseInt(rgbaMatch[3]);
+                const a = parseFloat(rgbaMatch[4]);
+                
+                // Convert to 8-digit hex
+                const alpha = Math.round(a * 255);
+                colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+              }
+            } else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
+              // Convert 6-digit hex to 8-digit hex (add FF for full opacity)
+              if (variable.value.length === 7) {
+                colorValue = variable.value + 'FF';
+              }
+            }
+            
+            primitiveColors['Umain-colors/Value'][colorFamily][colorShade] = {
+              value: colorValue,
+              type: 'color'
+            };
+          }
         }
       });
     }
@@ -1917,6 +1965,16 @@ function transformToTokenStudio(tokens: any): any {
   tokenStudio['Semantic Spatial/landscape'] = spatialLandscape;
   tokenStudio['Umain-typo tokens/Original'] = compositeTypography;
 
+  // Add fallback if no primitive colors were found
+  if (!primitiveColors['Umain-colors/Value']) {
+    tokenStudio['Umain-colors/Value'] = {
+      'Greyscale': {
+        '100': { value: '#f9f9f9FF', type: 'color' },
+        '900': { value: '#1b1b1bFF', type: 'color' }
+      }
+    };
+  }
+
   // Set metadata
   tokenStudio.$metadata.tokenSetOrder = [
     'Umain-colors/Value',
@@ -1928,6 +1986,7 @@ function transformToTokenStudio(tokens: any): any {
     'Umain-typo tokens/Original'
   ];
 
+  console.log('Token Studio structure created:', Object.keys(tokenStudio));
   return tokenStudio;
 }
 
@@ -2011,10 +2070,15 @@ figma.ui.onmessage = async (msg) => {
     }
   } else if (msg.type === 'export-token-studio') {
     try {
+      console.log('Starting Token Studio export...');
       const allVariables = await getAllVariables();
+      console.log('All variables loaded:', Object.keys(allVariables));
       const selectedCollections = msg.selectedCollections || [];
+      console.log('Selected collections:', selectedCollections);
       const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+      console.log('Filtered variables:', Object.keys(filteredVariables));
       const tokenStudio = transformToTokenStudio(filteredVariables);
+      console.log('Token Studio transformation complete:', Object.keys(tokenStudio));
       
       figma.ui.postMessage({
         type: 'export-token-studio-complete',
@@ -2023,9 +2087,9 @@ figma.ui.onmessage = async (msg) => {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('Token Studio export error:', error);
       figma.ui.postMessage({ type: 'export-error', message: errorMessage });
       figma.notify('Error exporting Token Studio format. See plugin console for details.', { error: true });
-      console.error(error);
     }
   } else if (msg.type === 'push-to-github') {
     try {
