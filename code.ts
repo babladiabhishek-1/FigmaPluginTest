@@ -309,6 +309,22 @@ async function exportDTCGTokens() {
   return transformToDTCG(standardTokens);
 }
 
+// Filter variables by selected collections
+function filterVariablesByCollections(categorizedVariables: any, selectedCollections: string[]): any {
+  if (!selectedCollections || selectedCollections.length === 0) {
+    return categorizedVariables; // Return all if no selection
+  }
+  
+  const filtered: any = {};
+  selectedCollections.forEach(collectionName => {
+    if (categorizedVariables[collectionName]) {
+      filtered[collectionName] = categorizedVariables[collectionName];
+    }
+  });
+  
+  return filtered;
+}
+
 // Get all available variables for the side pane with categorization
 async function getAllVariables() {
   const categorizedVariables: any = {};
@@ -328,7 +344,7 @@ async function getAllVariables() {
     for (const variable of localVariables) {
       const collection = collections.find(c => c.variableIds.includes(variable.id));
       const modes = collection ? collection.modes : [];
-
+      
       const variableData = {
         id: variable.id,
         name: variable.name,
@@ -1311,8 +1327,10 @@ async function pushToGitHub(repoUrl: string, token: string, branch: string, path
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'export-tokens') {
     try {
-      const tokens = await exportTokens();
-      const jsonString = JSON.stringify(tokens, null, 2);
+      const allVariables = await getAllVariables();
+      const selectedCollections = msg.selectedCollections || [];
+      const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+      const jsonString = JSON.stringify(filteredVariables, null, 2);
       figma.ui.postMessage({ type: 'export-complete', jsonString });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -1322,7 +1340,10 @@ figma.ui.onmessage = async (msg) => {
     }
   } else if (msg.type === 'export-dtcg-tokens') {
     try {
-      const dtcgTokens = await exportDTCGTokens();
+      const allVariables = await getAllVariables();
+      const selectedCollections = msg.selectedCollections || [];
+      const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+      const dtcgTokens = transformToDTCG(filteredVariables);
       const jsonString = JSON.stringify(dtcgTokens, null, 2);
       figma.ui.postMessage({ type: 'export-dtcg-complete', jsonString });
     } catch (error) {
@@ -1333,7 +1354,10 @@ figma.ui.onmessage = async (msg) => {
     }
   } else if (msg.type === 'export-enhanced-dtcg') {
     try {
-      const dtcgTokens = await exportEnhancedDTCG();
+      const allVariables = await getAllVariables();
+      const selectedCollections = msg.selectedCollections || [];
+      const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+      const dtcgTokens = await exportEnhancedDTCG(filteredVariables);
       const jsonString = JSON.stringify(dtcgTokens, null, 2);
       figma.ui.postMessage({ type: 'export-enhanced-dtcg-complete', jsonString });
     } catch (error) {

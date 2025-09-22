@@ -66,6 +66,14 @@
       background-color: #007aff;
     }
 
+    .category-checkbox {
+      margin-right: 8px;
+      width: 14px;
+      height: 14px;
+      accent-color: #18a0fb;
+      cursor: pointer;
+    }
+
     .category-name {
       font-weight: 500;
       font-size: 13px;
@@ -594,6 +602,7 @@
 
     // Store original categorized variables for filtering
     let originalCategorizedVariables = null;
+    let selectedCollections = new Set();
 
     // GitHub elements
     const githubRepoInput = document.getElementById('github-repo');
@@ -644,7 +653,12 @@
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       status.textContent = '';
-      parent.postMessage({ pluginMessage: { type: 'export-tokens' } }, '*');
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-tokens',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
     };
 
     exportDTCGBtn.onclick = () => {
@@ -652,7 +666,12 @@
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       status.textContent = '';
-      parent.postMessage({ pluginMessage: { type: 'export-dtcg-tokens' } }, '*');
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-dtcg-tokens',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
     };
 
     exportEnhancedDTCGBtn.onclick = () => {
@@ -660,7 +679,12 @@
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       status.textContent = '';
-      parent.postMessage({ pluginMessage: { type: 'export-enhanced-dtcg' } }, '*');
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-enhanced-dtcg',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
     };
 
     exportTailwindCSSBtn.onclick = () => {
@@ -668,7 +692,12 @@
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       status.textContent = '';
-      parent.postMessage({ pluginMessage: { type: 'export-tailwind-css' } }, '*');
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'export-tailwind-css',
+          selectedCollections: Array.from(selectedCollections)
+        } 
+      }, '*');
     };
 
 
@@ -853,6 +882,7 @@
           html += `
             <div class="category">
               <div class="category-header" data-category="${categoryName}">
+                <input type="checkbox" class="category-checkbox" id="checkbox-${categoryName.replace(/[^a-zA-Z0-9-_]/g, '-')}" checked>
                 <span class="category-name">${categoryName}</span>
                 <span class="category-count">${variables.length}</span>
                 <span class="category-toggle">▶</span>
@@ -890,8 +920,28 @@
         header.classList.remove('active');
         header.querySelector('.category-toggle').textContent = '▶';
         
-        // Enable toggle functionality
-        header.onclick = () => {
+        // Add to selected collections by default
+        selectedCollections.add(categoryName);
+        
+        // Handle checkbox clicks
+        const checkbox = header.querySelector('.category-checkbox');
+        if (checkbox) {
+          checkbox.addEventListener('change', (event) => {
+            event.stopPropagation(); // Prevent header click
+            if (event.target.checked) {
+              selectedCollections.add(categoryName);
+            } else {
+              selectedCollections.delete(categoryName);
+            }
+            console.log('Selected collections:', Array.from(selectedCollections));
+            updateSelectionStatus();
+          });
+        }
+        
+        // Enable toggle functionality (click on header, not checkbox)
+        header.onclick = (event) => {
+          if (event.target.type === 'checkbox') return; // Don't toggle if clicking checkbox
+          
           const categoryItems = header.nextElementSibling;
           const isExpanded = categoryItems.classList.contains('expanded');
           
@@ -930,6 +980,16 @@
         categorized[category].push(v);
       });
       return categorized;
+    }
+
+    // Function to update selection status
+    function updateSelectionStatus() {
+      const selectedCount = selectedCollections.size;
+      const totalCount = Object.keys(originalCategorizedVariables || {}).length;
+      const statusText = `${selectedCount} of ${totalCount} collections selected`;
+      
+      // Update status in console for now
+      console.log(statusText);
     }
 
     window.onmessage = event => {
