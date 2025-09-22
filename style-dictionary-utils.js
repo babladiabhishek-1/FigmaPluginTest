@@ -45,65 +45,203 @@ function transformToStyleDictionary(tokens) {
     });
     return sdTokens;
 }
-// Generate Style Dictionary output for a specific platform
+// Generate platform-specific output without Style Dictionary
 async function generateStyleDictionaryOutput(tokens, platform) {
-    // @ts-ignore - Style Dictionary is loaded at runtime
-    const StyleDictionary = require('style-dictionary');
     // Transform tokens to Style Dictionary format
     const sdTokens = transformToStyleDictionary(tokens);
-    // Create a temporary config for the specific platform
-    const config = {
-        source: [],
-        platforms: {
-            [platform]: {
-                transformGroup: getTransformGroup(platform),
-                buildPath: 'temp/',
-                files: [{
-                        destination: 'output',
-                        format: getFormat(platform)
-                    }]
-            }
-        }
-    };
-    // Register the tokens as a source
-    StyleDictionary.registerSource({
-        name: 'figma-tokens',
-        tokens: sdTokens
+    // Generate platform-specific output
+    switch (platform) {
+        case 'css':
+            return generateCSSOutput(sdTokens);
+        case 'scss':
+            return generateSCSSOutput(sdTokens);
+        case 'js':
+            return generateJSOutput(sdTokens);
+        case 'ts':
+            return generateTSOutput(sdTokens);
+        case 'ios':
+            return generateiOSOutput(sdTokens);
+        case 'android':
+            return generateAndroidOutput(sdTokens);
+        case 'flutter':
+            return generateFlutterOutput(sdTokens);
+        case 'react-native':
+            return generateReactNativeOutput(sdTokens);
+        case 'json':
+            return generateJSONOutput(sdTokens);
+        default:
+            return generateJSONOutput(sdTokens);
+    }
+}
+// CSS Custom Properties generator
+function generateCSSOutput(tokens) {
+    let output = ':root {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            const cssVarName = `--${category}-${tokenName}`;
+            output += `  ${cssVarName}: ${token.value};\n`;
+        });
     });
-    // Build for the specific platform
-    const builder = StyleDictionary.extend(config);
-    const result = await builder.buildPlatform(platform);
-    return result.files[0].contents;
+    output += '}\n';
+    return output;
 }
-// Get the appropriate transform group for a platform
-function getTransformGroup(platform) {
-    const transformGroups = {
-        'css': 'css',
-        'scss': 'scss',
-        'js': 'js',
-        'ts': 'js',
-        'ios': 'ios',
-        'android': 'android',
-        'flutter': 'flutter',
-        'react-native': 'react-native',
-        'json': 'js'
-    };
-    return transformGroups[platform] || 'js';
+// SCSS Variables generator
+function generateSCSSOutput(tokens) {
+    let output = '';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `// ${category}\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            const scssVarName = `$${category}-${tokenName}`;
+            output += `${scssVarName}: ${token.value};\n`;
+        });
+        output += '\n';
+    });
+    return output;
 }
-// Get the appropriate format for a platform
-function getFormat(platform) {
-    const formats = {
-        'css': 'css/variables',
-        'scss': 'scss/variables',
-        'js': 'javascript/es6',
-        'ts': 'typescript/es6-declarations',
-        'ios': 'ios/swift/class.swift',
-        'android': 'android/colors',
-        'flutter': 'flutter/class.dart',
-        'react-native': 'javascript/module',
-        'json': 'json/flat'
-    };
-    return formats[platform] || 'json/flat';
+// JavaScript/ES6 generator
+function generateJSOutput(tokens) {
+    let output = 'export const designTokens = {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  ${category}: {\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            output += `    ${tokenName}: '${token.value}',\n`;
+        });
+        output += '  },\n';
+    });
+    output += '};\n';
+    return output;
+}
+// TypeScript generator
+function generateTSOutput(tokens) {
+    let output = 'export interface DesignTokens {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  ${category}: {\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            output += `    ${tokenName}: string;\n`;
+        });
+        output += '  };\n';
+    });
+    output += '}\n\n';
+    output += 'export const designTokens: DesignTokens = {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  ${category}: {\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            output += `    ${tokenName}: '${token.value}',\n`;
+        });
+        output += '  },\n';
+    });
+    output += '};\n';
+    return output;
+}
+// iOS Swift generator
+function generateiOSOutput(tokens) {
+    let output = 'import UIKit\n\n';
+    output += 'class DesignTokens {\n';
+    output += '  static let shared = DesignTokens()\n';
+    output += '  private init() {}\n\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  // MARK: - ${category}\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            if (token.type === 'color') {
+                const color = parseColor(token.value);
+                output += `  static let ${tokenName} = UIColor(red: ${color.r}, green: ${color.g}, blue: ${color.b}, alpha: ${color.a})\n`;
+            }
+            else {
+                output += `  static let ${tokenName} = "${token.value}"\n`;
+            }
+        });
+        output += '\n';
+    });
+    output += '}\n';
+    return output;
+}
+// Android Kotlin generator
+function generateAndroidOutput(tokens) {
+    let output = 'package com.example.designsystem\n\n';
+    output += 'import androidx.compose.ui.graphics.Color\n\n';
+    output += 'object DesignTokens {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `    // ${category}\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            if (token.type === 'color') {
+                const color = parseColor(token.value);
+                output += `    val ${tokenName} = Color(0x${color.hex})\n`;
+            }
+            else {
+                output += `    val ${tokenName} = "${token.value}"\n`;
+            }
+        });
+        output += '\n';
+    });
+    output += '}\n';
+    return output;
+}
+// Flutter Dart generator
+function generateFlutterOutput(tokens) {
+    let output = 'import \'package:flutter/material.dart\';\n\n';
+    output += 'class DesignTokens {\n';
+    output += '  static const DesignTokens _instance = DesignTokens._();\n';
+    output += '  factory DesignTokens() => _instance;\n';
+    output += '  const DesignTokens._();\n\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  // ${category}\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            if (token.type === 'color') {
+                const color = parseColor(token.value);
+                output += `  static const Color ${tokenName} = Color(0x${color.hex});\n`;
+            }
+            else {
+                output += `  static const String ${tokenName} = '${token.value}';\n`;
+            }
+        });
+        output += '\n';
+    });
+    output += '}\n';
+    return output;
+}
+// React Native generator
+function generateReactNativeOutput(tokens) {
+    let output = 'const designTokens = {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  ${category}: {\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            output += `    ${tokenName}: '${token.value}',\n`;
+        });
+        output += '  },\n';
+    });
+    output += '};\n\n';
+    output += 'export default designTokens;\n';
+    return output;
+}
+// JSON generator
+function generateJSONOutput(tokens) {
+    return JSON.stringify(tokens, null, 2);
+}
+// Helper function to parse color values
+function parseColor(colorValue) {
+    // Handle hex colors
+    if (colorValue.startsWith('#')) {
+        const hex = colorValue.replace('#', '');
+        const r = parseInt(hex.substr(0, 2), 16) / 255;
+        const g = parseInt(hex.substr(2, 2), 16) / 255;
+        const b = parseInt(hex.substr(4, 2), 16) / 255;
+        const a = hex.length === 8 ? parseInt(hex.substr(6, 2), 16) / 255 : 1;
+        return { r, g, b, a, hex: hex.toUpperCase() };
+    }
+    // Handle rgb/rgba colors
+    if (colorValue.startsWith('rgb')) {
+        const values = colorValue.match(/\d+/g);
+        if (values && values.length >= 3) {
+            const r = parseInt(values[0]) / 255;
+            const g = parseInt(values[1]) / 255;
+            const b = parseInt(values[2]) / 255;
+            const a = values[3] ? parseInt(values[3]) / 255 : 1;
+            const hex = ((Math.round(r * 255) << 24) | (Math.round(g * 255) << 16) | (Math.round(b * 255) << 8) | Math.round(a * 255)).toString(16).toUpperCase().padStart(8, '0');
+            return { r, g, b, a, hex };
+        }
+    }
+    // Default fallback
+    return { r: 0, g: 0, b: 0, a: 1, hex: 'FF000000' };
 }
 // Available platforms
 exports.AVAILABLE_PLATFORMS = [
