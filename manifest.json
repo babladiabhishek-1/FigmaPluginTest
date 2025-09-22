@@ -3,11 +3,7 @@
   "id": "design-token-exporter-pro",
   "api": "1.0.0",
   "main": "code.js",
-  "ui": {
-    "file": "ui.html",
-    "width": 800,
-    "height": 600
-  },
+  "ui": "ui.html",
   "editorType": ["figma"],
   "networkAccess": {
     "allowedDomains": ["https://api.github.com"]
