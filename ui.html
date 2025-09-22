@@ -815,13 +815,13 @@
 
     // Export button handlers
     exportBtn.onclick = () => {
-      output.value = 'Exporting standard tokens, please wait...';
+      output.value = 'Exporting Token Studio format, please wait...';
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
-      status.textContent = '';
+      status.textContent = 'Exporting...';
       parent.postMessage({ 
         pluginMessage: { 
-          type: 'export-tokens',
+          type: 'export-token-studio',
           selectedCollections: Array.from(selectedCollections)
         } 
       }, '*');
@@ -1304,7 +1304,7 @@
         output.value = message.jsonString;
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
-        status.textContent = 'Standard export successful!';
+        status.textContent = 'Token Studio format exported successfully!';
       } else if (message.type === 'export-style-dictionary-complete') {
         output.value = message.output;
         copyBtn.disabled = false;
