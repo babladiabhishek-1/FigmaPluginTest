@@ -749,10 +749,31 @@ async function getAllVariables() {
     // Get paint styles
     const paintStyles = await figma.getLocalPaintStylesAsync();
     for (const style of paintStyles) {
+      // Extract color value from paint style
+      let colorValue = 'No value';
+      if (style.paints && style.paints.length > 0) {
+        const paint = style.paints[0];
+        if (paint.type === 'SOLID') {
+          const { r, g, b } = paint.color;
+          const a = paint.opacity ?? 1;
+          const red = Math.round(r * 255);
+          const green = Math.round(g * 255);
+          const blue = Math.round(b * 255);
+          const alpha = Math.round(a * 255);
+          
+          if (a === 1) {
+            colorValue = `#${red.toString(16).padStart(2, '0')}${green.toString(16).padStart(2, '0')}${blue.toString(16).padStart(2, '0')}`;
+          } else {
+            colorValue = `rgba(${red}, ${green}, ${blue}, ${a})`;
+          }
+        }
+      }
+      
       const styleData = {
         id: style.id,
         name: style.name,
         type: 'PAINT_STYLE',
+        value: colorValue,
         collection: 'Paint Styles',
         modes: ['Default'],
         description: style.description || ''
@@ -1655,39 +1676,25 @@ function extractColors(variables: any): any {
   const colors: any = {};
   
   Object.entries(variables).forEach(([collectionName, variables]: [string, any]) => {
-    if (collectionName === 'Umain-colors') {
-      // Handle Umain color collections only
-      colors[`${collectionName}/Value`] = {};
+    // Look for Paint Styles collection that contains Umain colors
+    if (collectionName === 'Paint Styles') {
+      colors['Umain-colors/Value'] = {};
       
       (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'COLOR' && variable.value) {
+        // Check if this is a Umain color paint style
+        if (variable.type === 'PAINT_STYLE' && variable.name && variable.name.startsWith('Umain - colors/')) {
           const nameParts = variable.name.split('/');
-          if (nameParts.length >= 2) {
-            const colorFamily = nameParts[0];
-            const colorShade = nameParts[1];
+          if (nameParts.length >= 3) {
+            const colorFamily = nameParts[1]; // e.g., "Greyscale"
+            const colorShade = nameParts[2];  // e.g., "900"
             
-            if (!colors[`${collectionName}/Value`][colorFamily]) {
-              colors[`${collectionName}/Value`][colorFamily] = {};
+            if (!colors['Umain-colors/Value'][colorFamily]) {
+              colors['Umain-colors/Value'][colorFamily] = {};
             }
             
-            // Convert RGBA to hex if needed
-            let colorValue = variable.value;
-            if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-              const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-              if (rgbaMatch) {
-                const r = parseInt(rgbaMatch[1]);
-                const g = parseInt(rgbaMatch[2]);
-                const b = parseInt(rgbaMatch[3]);
-                const a = parseFloat(rgbaMatch[4]);
-                
-                if (a === 1) {
-                  colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                }
-              }
-            }
-            
-            colors[`${collectionName}/Value`][colorFamily][colorShade] = {
-              value: colorValue,
+            // Use the actual color value extracted from the paint style
+            colors['Umain-colors/Value'][colorFamily][colorShade] = {
+              value: variable.value || 'No value',
               type: 'color',
               description: variable.description || ''
             };
@@ -1695,7 +1702,6 @@ function extractColors(variables: any): any {
         }
       });
     }
-    // Removed semantic colors and component tokens - only showing Umain-colors
   });
   
   return colors;
