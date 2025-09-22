@@ -161,33 +161,7 @@ async function exportTokens() {
     }
   }
 
-  // -- Process Text Styles (Font Sizes, Line Heights, etc.) --
-  const textStyles = await figma.getLocalTextStylesAsync();
-  for (const style of textStyles) {
-      const path = style.name.split('/');
-      if (path.length > 0) {
-          // The example separates font size and line height into different tokens
-          // This assumes style names like "Dynamic Text Size/H1" and "Dynamic Text Size/H1 line-height"
-          let value;
-          let type = 'number'; // Generic number type for dimensions
-          
-          if (style.name.toLowerCase().includes('line-height')) {
-              if (style.lineHeight.unit !== 'AUTO') {
-                 value = style.lineHeight.value;
-              }
-          } else {
-              value = style.fontSize;
-          }
-
-          if (value !== undefined) {
-              const token: any = { $value: value, $type: type };
-               if (style.description) {
-                  token['$description'] = style.description;
-               }
-              setNestedObjectValue(allTokens, path, token);
-          }
-      }
-  }
+  // Text styles processing removed to avoid duplication with variables
 
   // NOTE: You can add processors for Effect Styles (shadows) or Grid Styles here if needed.
   // This version covers the types in your example JSON.
@@ -790,28 +764,8 @@ async function getAllVariables() {
       categorizedVariables[collectionName].push(styleData);
     }
     
-    // Get text styles
-    const textStyles = await figma.getLocalTextStylesAsync();
-    for (const style of textStyles) {
-      const styleData = {
-        id: style.id,
-        name: style.name,
-        type: 'TEXT_STYLE',
-        collection: 'Text Styles',
-        modes: ['Default'],
-        description: style.description || ''
-      };
-      
-      // Add to all variables list
-      allVariables.push(styleData);
-      
-      // Group text styles by collection
-      const collectionName = 'Text Styles';
-      if (!categorizedVariables[collectionName]) {
-        categorizedVariables[collectionName] = [];
-      }
-      categorizedVariables[collectionName].push(styleData);
-    }
+    // Text styles are not processed separately to avoid duplication with variables
+    // Variables already contain font size and line-height values
     
   } catch (error) {
     console.error('Error getting variables:', error);
