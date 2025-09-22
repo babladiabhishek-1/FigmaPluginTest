@@ -1,38 +1,5 @@
 "use strict";
 // This file holds the main code for the plugin. It has access to the Figma API.
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 // Show the plugin UI with larger size
 figma.showUI(__html__, { width: 1000, height: 600 });
 // Store previous variable state for change detection
@@ -200,12 +167,246 @@ async function exportTokens() {
     // This version covers the types in your example JSON.
     return allTokens;
 }
-// --- DTCG FORMAT TRANSFORMATION ---
+// --- STYLE DICTIONARY FORMAT TRANSFORMATION ---
+// Transform tokens to Style Dictionary format
+function transformToStyleDictionary(tokens) {
+    const sdTokens = {};
+    Object.entries(tokens).forEach(([collectionName, variables]) => {
+        // Convert collection name to Style Dictionary format
+        const categoryName = collectionName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '');
+        sdTokens[categoryName] = {};
+        variables.forEach((variable) => {
+            // Convert variable name to Style Dictionary format
+            const tokenName = variable.name
+                .toLowerCase()
+                .replace(/[^a-zA-Z0-9]/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+            // Map Figma types to Style Dictionary types
+            let sdType = 'other';
+            switch (variable.type) {
+                case 'COLOR':
+                    sdType = 'color';
+                    break;
+                case 'FLOAT':
+                    sdType = 'dimension';
+                    break;
+                case 'STRING':
+                    sdType = 'string';
+                    break;
+                case 'BOOLEAN':
+                    sdType = 'boolean';
+                    break;
+                default:
+                    sdType = 'other';
+            }
+            sdTokens[categoryName][tokenName] = {
+                value: variable.value,
+                type: sdType,
+                description: variable.description || ''
+            };
+        });
+    });
+    return sdTokens;
+}
+// CSS Custom Properties generator
+function generateCSSOutput(tokens) {
+    let output = ':root {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            const cssVarName = `--${category}-${tokenName}`;
+            output += `  ${cssVarName}: ${token.value};\n`;
+        });
+    });
+    output += '}\n';
+    return output;
+}
+// SCSS Variables generator
+function generateSCSSOutput(tokens) {
+    let output = '';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `// ${category}\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            const scssVarName = `$${category}-${tokenName}`;
+            output += `${scssVarName}: ${token.value};\n`;
+        });
+        output += '\n';
+    });
+    return output;
+}
+// JavaScript/ES6 generator
+function generateJSOutput(tokens) {
+    let output = 'export const designTokens = {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  ${category}: {\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            output += `    ${tokenName}: '${token.value}',\n`;
+        });
+        output += '  },\n';
+    });
+    output += '};\n';
+    return output;
+}
+// TypeScript generator
+function generateTSOutput(tokens) {
+    let output = 'export interface DesignTokens {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  ${category}: {\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            output += `    ${tokenName}: string;\n`;
+        });
+        output += '  };\n';
+    });
+    output += '}\n\n';
+    output += 'export const designTokens: DesignTokens = {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  ${category}: {\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            output += `    ${tokenName}: '${token.value}',\n`;
+        });
+        output += '  },\n';
+    });
+    output += '};\n';
+    return output;
+}
+// iOS Swift generator
+function generateiOSOutput(tokens) {
+    let output = 'import UIKit\n\n';
+    output += 'class DesignTokens {\n';
+    output += '  static let shared = DesignTokens()\n';
+    output += '  private init() {}\n\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  // MARK: - ${category}\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            if (token.type === 'color') {
+                const color = parseColor(token.value);
+                output += `  static let ${tokenName} = UIColor(red: ${color.r}, green: ${color.g}, blue: ${color.b}, alpha: ${color.a})\n`;
+            }
+            else {
+                output += `  static let ${tokenName} = "${token.value}"\n`;
+            }
+        });
+        output += '\n';
+    });
+    output += '}\n';
+    return output;
+}
+// Android Kotlin generator
+function generateAndroidOutput(tokens) {
+    let output = 'package com.example.designsystem\n\n';
+    output += 'import androidx.compose.ui.graphics.Color\n\n';
+    output += 'object DesignTokens {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `    // ${category}\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            if (token.type === 'color') {
+                const color = parseColor(token.value);
+                output += `    val ${tokenName} = Color(0x${color.hex})\n`;
+            }
+            else {
+                output += `    val ${tokenName} = "${token.value}"\n`;
+            }
+        });
+        output += '\n';
+    });
+    output += '}\n';
+    return output;
+}
+// Flutter Dart generator
+function generateFlutterOutput(tokens) {
+    let output = 'import \'package:flutter/material.dart\';\n\n';
+    output += 'class DesignTokens {\n';
+    output += '  static const DesignTokens _instance = DesignTokens._();\n';
+    output += '  factory DesignTokens() => _instance;\n';
+    output += '  const DesignTokens._();\n\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  // ${category}\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            if (token.type === 'color') {
+                const color = parseColor(token.value);
+                output += `  static const Color ${tokenName} = Color(0x${color.hex});\n`;
+            }
+            else {
+                output += `  static const String ${tokenName} = '${token.value}';\n`;
+            }
+        });
+        output += '\n';
+    });
+    output += '}\n';
+    return output;
+}
+// React Native generator
+function generateReactNativeOutput(tokens) {
+    let output = 'const designTokens = {\n';
+    Object.entries(tokens).forEach(([category, categoryTokens]) => {
+        output += `  ${category}: {\n`;
+        Object.entries(categoryTokens).forEach(([tokenName, token]) => {
+            output += `    ${tokenName}: '${token.value}',\n`;
+        });
+        output += '  },\n';
+    });
+    output += '};\n\n';
+    output += 'export default designTokens;\n';
+    return output;
+}
+// JSON generator
+function generateJSONOutput(tokens) {
+    return JSON.stringify(tokens, null, 2);
+}
+// Helper function to parse color values
+function parseColor(colorValue) {
+    // Handle hex colors
+    if (colorValue.startsWith('#')) {
+        const hex = colorValue.replace('#', '');
+        const r = parseInt(hex.substr(0, 2), 16) / 255;
+        const g = parseInt(hex.substr(2, 2), 16) / 255;
+        const b = parseInt(hex.substr(4, 2), 16) / 255;
+        const a = hex.length === 8 ? parseInt(hex.substr(6, 2), 16) / 255 : 1;
+        return { r, g, b, a, hex: hex.toUpperCase() };
+    }
+    // Handle rgb/rgba colors
+    if (colorValue.startsWith('rgb')) {
+        const values = colorValue.match(/\d+/g);
+        if (values && values.length >= 3) {
+            const r = parseInt(values[0]) / 255;
+            const g = parseInt(values[1]) / 255;
+            const b = parseInt(values[2]) / 255;
+            const a = values[3] ? parseInt(values[3]) / 255 : 1;
+            const hex = ((Math.round(r * 255) << 24) | (Math.round(g * 255) << 16) | (Math.round(b * 255) << 8) | Math.round(a * 255)).toString(16).toUpperCase().padStart(8, '0');
+            return { r, g, b, a, hex };
+        }
+    }
+    // Default fallback
+    return { r: 0, g: 0, b: 0, a: 1, hex: 'FF000000' };
+}
 // Export Style Dictionary tokens for a specific platform
 async function exportStyleDictionaryTokens(platform) {
     const allVariables = await getAllVariables();
-    const { generateStyleDictionaryOutput } = await Promise.resolve().then(() => __importStar(require('./style-dictionary-utils')));
-    return await generateStyleDictionaryOutput(allVariables, platform);
+    // Transform tokens to Style Dictionary format
+    const sdTokens = transformToStyleDictionary(allVariables);
+    // Generate platform-specific output
+    switch (platform) {
+        case 'css':
+            return generateCSSOutput(sdTokens);
+        case 'scss':
+            return generateSCSSOutput(sdTokens);
+        case 'js':
+            return generateJSOutput(sdTokens);
+        case 'ts':
+            return generateTSOutput(sdTokens);
+        case 'ios':
+            return generateiOSOutput(sdTokens);
+        case 'android':
+            return generateAndroidOutput(sdTokens);
+        case 'flutter':
+            return generateFlutterOutput(sdTokens);
+        case 'react-native':
+            return generateReactNativeOutput(sdTokens);
+        case 'json':
+            return generateJSONOutput(sdTokens);
+        default:
+            return generateJSONOutput(sdTokens);
+    }
 }
 // Get filename for platform
 function getFilenameForPlatform(platform) {
