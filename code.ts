@@ -202,54 +202,125 @@ function transformToStyleDictionary(tokens: any): any {
   const sdTokens: any = {};
 
   Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
-    // Use the collection name as the top-level key
-    sdTokens[collectionName] = {};
-
-    (variables as any[]).forEach((variable: any) => {
-      // Parse the variable name to create hierarchical structure
-      const nameParts = variable.name.split('-');
-      let currentLevel = sdTokens[collectionName];
-
-      // Create nested structure based on variable name patterns
-      for (let i = 0; i < nameParts.length - 1; i++) {
-        const part = nameParts[i];
-        if (!currentLevel[part]) {
-          currentLevel[part] = {};
+    // Create a hierarchical structure based on collection and variable patterns
+    if (collectionName === 'Umain-colors') {
+      // Special handling for color collections
+      sdTokens[`${collectionName}/Value`] = {};
+      
+      (variables as any[]).forEach((variable: any) => {
+        // Parse color names like "Fuchsia/300" or "Greyscale/800_15"
+        const nameParts = variable.name.split('/');
+        if (nameParts.length >= 2) {
+          const colorFamily = nameParts[0];
+          const colorShade = nameParts[1];
+          
+          if (!sdTokens[`${collectionName}/Value`][colorFamily]) {
+            sdTokens[`${collectionName}/Value`][colorFamily] = {};
+          }
+          
+          // Convert RGBA to hex if it's a color
+          let tokenValue = variable.value;
+          if (variable.type === 'COLOR' && typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+            // Convert rgba to hex
+            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+            if (rgbaMatch) {
+              const r = parseInt(rgbaMatch[1]);
+              const g = parseInt(rgbaMatch[2]);
+              const b = parseInt(rgbaMatch[3]);
+              const a = parseFloat(rgbaMatch[4]);
+              
+              if (a === 1) {
+                tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+              } else {
+                tokenValue = variable.value; // Keep as rgba
+              }
+            }
+          }
+          
+          sdTokens[`${collectionName}/Value`][colorFamily][colorShade] = {
+            value: tokenValue,
+            type: 'color',
+            description: variable.description || ''
+          };
         }
-        currentLevel = currentLevel[part];
-      }
-
-      // The last part is the actual token name
-      const tokenName = nameParts[nameParts.length - 1];
-
-      // Map Figma types to Style Dictionary types
-      let sdType = 'other';
-      switch (variable.type) {
-        case 'COLOR':
-          sdType = 'color';
+      });
+    } else if (collectionName === 'Umain - semantic Colors') {
+      // Handle semantic colors with Light/Dark modes
+      (variables as any[]).forEach((variable: any) => {
+        // Parse semantic color names like "interactive/secondaryPressed"
+        const nameParts = variable.name.split('/');
+        if (nameParts.length >= 2) {
+          const category = nameParts[0];
+          const subcategory = nameParts[1];
+          
+          // Check if this is a Light or Dark mode variable
+          const mode = variable.modes && variable.modes.includes('Light') ? 'Light' : 'Dark';
+          const key = `${collectionName}/${mode}`;
+          
+          if (!sdTokens[key]) {
+            sdTokens[key] = {};
+          }
+          if (!sdTokens[key][category]) {
+            sdTokens[key][category] = {};
+          }
+          
+          // Convert RGBA to hex if it's a color
+          let tokenValue = variable.value;
+          if (variable.type === 'COLOR' && typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+            if (rgbaMatch) {
+              const r = parseInt(rgbaMatch[1]);
+              const g = parseInt(rgbaMatch[2]);
+              const b = parseInt(rgbaMatch[3]);
+              const a = parseFloat(rgbaMatch[4]);
+              
+              if (a === 1) {
+                tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+              }
+            }
+          }
+          
+          sdTokens[key][category][subcategory] = {
+            value: tokenValue,
+            type: 'color',
+            description: variable.description || ''
+          };
+        }
+      });
+    } else {
+      // Default handling for other collections
+      sdTokens[collectionName] = {};
+      
+      (variables as any[]).forEach((variable: any) => {
+        // Map Figma types to Style Dictionary types
+        let sdType = 'other';
+        switch (variable.type) {
+          case 'COLOR':
+            sdType = 'color';
             break;
-        case 'FLOAT':
-          sdType = 'dimension';
+          case 'FLOAT':
+            sdType = 'dimension';
             break;
-        case 'STRING':
-          sdType = 'string';
-          break;
-        case 'BOOLEAN':
-          sdType = 'boolean';
+          case 'STRING':
+            sdType = 'string';
+            break;
+          case 'BOOLEAN':
+            sdType = 'boolean';
             break;
           default:
-          sdType = 'other';
-      }
+            sdType = 'other';
+        }
 
-      // Use the actual value from the variable
-      const tokenValue = variable.value !== null ? variable.value : '';
+        // Use the actual value from the variable
+        const tokenValue = variable.value !== null ? variable.value : '';
 
-      currentLevel[tokenName] = {
-        value: tokenValue,
-        type: sdType,
-        description: variable.description || ''
-      };
-    });
+        sdTokens[collectionName][variable.name] = {
+          value: tokenValue,
+          type: sdType,
+          description: variable.description || ''
+        };
+      });
+    }
   });
 
   return sdTokens;
