@@ -1656,7 +1656,7 @@ function extractColors(variables: any): any {
   
   Object.entries(variables).forEach(([collectionName, variables]: [string, any]) => {
     if (collectionName === 'Umain-colors') {
-      // Handle color collections
+      // Handle Umain color collections only
       colors[`${collectionName}/Value`] = {};
       
       (variables as any[]).forEach((variable: any) => {
@@ -1694,65 +1694,8 @@ function extractColors(variables: any): any {
           }
         }
       });
-    } else if (collectionName === 'Umain - semantic Colors') {
-      // Handle semantic colors
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'COLOR' && variable.value) {
-          const nameParts = variable.name.split('/');
-          if (nameParts.length >= 2) {
-            const category = nameParts[0];
-            const subcategory = nameParts[1];
-            
-            const mode = variable.modes && variable.modes.includes('Light') ? 'Light' : 'Dark';
-            const key = `${collectionName}/${mode}`;
-            
-            if (!colors[key]) {
-              colors[key] = {};
-            }
-            if (!colors[key][category]) {
-              colors[key][category] = {};
-            }
-            
-            // Convert RGBA to hex if needed
-            let colorValue = variable.value;
-            if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-              const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-              if (rgbaMatch) {
-                const r = parseInt(rgbaMatch[1]);
-                const g = parseInt(rgbaMatch[2]);
-                const b = parseInt(rgbaMatch[3]);
-                const a = parseFloat(rgbaMatch[4]);
-                
-                if (a === 1) {
-                  colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                }
-              }
-            }
-            
-            colors[key][category][subcategory] = {
-              value: colorValue,
-              type: 'color',
-              description: variable.description || ''
-            };
-          }
-        }
-      });
-    } else if (collectionName === 'Umain - component tokens') {
-      // Handle component color tokens
-      if (!colors[collectionName]) {
-        colors[collectionName] = {};
-      }
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'COLOR' && variable.value) {
-          colors[collectionName][variable.name] = {
-            value: variable.value,
-            type: 'color',
-            description: variable.description || ''
-          };
-        }
-      });
     }
+    // Removed semantic colors and component tokens - only showing Umain-colors
   });
   
   return colors;
