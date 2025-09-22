@@ -890,8 +890,7 @@
       
       parent.postMessage({ 
         pluginMessage: { 
-          type: 'export-style-dictionary',
-          platform: 'json',
+          type: 'export-token-studio',
           selectedCollections: Array.from(selectedCollections)
         } 
       }, '*');
@@ -904,10 +903,19 @@
       downloadBtn.disabled = true;
       status.textContent = 'Loading Style Dictionary...';
       
-      // Auto-select first platform
+      // Auto-select first platform and trigger export
       const platformSelect = document.getElementById('platform-select');
       if (platformSelect) {
         platformSelect.value = 'css';
+        
+        // Trigger the export
+        parent.postMessage({ 
+          pluginMessage: { 
+            type: 'export-style-dictionary',
+            platform: 'css',
+            selectedCollections: Array.from(selectedCollections)
+          } 
+        }, '*');
       }
     }
 
@@ -1375,7 +1383,12 @@
         output.value = message.output;
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
-        status.textContent = `${message.platform} export successful!`;
+        
+        if (message.platform === 'all') {
+          status.textContent = 'All platforms generated successfully!';
+        } else {
+          status.textContent = `${message.platform} export successful!`;
+        }
         
         // Update download button with correct filename
         if (downloadBtn) {

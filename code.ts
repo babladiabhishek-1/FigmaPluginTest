@@ -2253,5 +2253,53 @@ figma.ui.onmessage = async (msg) => {
       console.error('Error getting variables:', error);
       figma.ui.postMessage({ type: 'export-error', message: errorMessage });
     }
+  } else if (msg.type === 'export-style-dictionary') {
+    try {
+      console.log('Starting Style Dictionary export...');
+      const allVariables = await getAllVariables();
+      const selectedCollections = msg.selectedCollections || [];
+      const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
+      const platform = msg.platform || 'json';
+      
+      if (platform === 'all') {
+        // Generate all platforms
+        const platforms = ['css', 'scss', 'js', 'ts', 'ios', 'android', 'flutter', 'react-native'];
+        const allOutputs = {};
+        
+        for (const p of platforms) {
+          try {
+            const output = await exportStyleDictionaryTokens(p);
+            allOutputs[p] = output;
+          } catch (err) {
+            console.error(`Error generating ${p}:`, err);
+            allOutputs[p] = `Error generating ${p}: ${err.message}`;
+          }
+        }
+        
+        figma.ui.postMessage({
+          type: 'export-style-dictionary-complete',
+          output: JSON.stringify(allOutputs, null, 2),
+          platform: 'all',
+          filename: 'all-platforms.json'
+        });
+      } else {
+        // Generate single platform
+        const output = await exportStyleDictionaryTokens(platform);
+        figma.ui.postMessage({
+          type: 'export-style-dictionary-complete',
+          output: output,
+          platform: platform,
+          filename: getFilenameForPlatform(platform)
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('Style Dictionary export error:', error);
+      figma.ui.postMessage({
+        type: 'export-error',
+        message: errorMessage
+      });
+      figma.notify('Error exporting Style Dictionary format. See plugin console for details.', { error: true });
+    }
   }
 };
