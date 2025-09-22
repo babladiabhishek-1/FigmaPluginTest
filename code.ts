@@ -328,11 +328,16 @@ function generateiOSOutput(tokens: any): string {
   Object.entries(tokens).forEach(([category, categoryTokens]: [string, any]) => {
     output += `  // MARK: - ${category}\n`;
     Object.entries(categoryTokens).forEach(([tokenName, token]: [string, any]) => {
-      if (token.type === 'color') {
-        const color = parseColor(token.value);
-        output += `  static let ${tokenName} = UIColor(red: ${color.r}, green: ${color.g}, blue: ${color.b}, alpha: ${color.a})\n`;
-      } else {
-        output += `  static let ${tokenName} = "${token.value}"\n`;
+      try {
+        if (token.type === 'color') {
+          const color = parseColor(token.value);
+          output += `  static let ${tokenName} = UIColor(red: ${color.r}, green: ${color.g}, blue: ${color.b}, alpha: ${color.a})\n`;
+        } else {
+          output += `  static let ${tokenName} = "${token.value}"\n`;
+        }
+      } catch (error) {
+        console.error(`Error processing token ${tokenName}:`, error);
+        output += `  static let ${tokenName} = "${token.value}" // Error parsing\n`;
       }
     });
     output += '\n';
@@ -351,11 +356,16 @@ function generateAndroidOutput(tokens: any): string {
   Object.entries(tokens).forEach(([category, categoryTokens]: [string, any]) => {
     output += `    // ${category}\n`;
     Object.entries(categoryTokens).forEach(([tokenName, token]: [string, any]) => {
-      if (token.type === 'color') {
-        const color = parseColor(token.value);
-        output += `    val ${tokenName} = Color(0x${color.hex})\n`;
-      } else {
-        output += `    val ${tokenName} = "${token.value}"\n`;
+      try {
+        if (token.type === 'color') {
+          const color = parseColor(token.value);
+          output += `    val ${tokenName} = Color(0x${color.hex})\n`;
+        } else {
+          output += `    val ${tokenName} = "${token.value}"\n`;
+        }
+      } catch (error) {
+        console.error(`Error processing token ${tokenName}:`, error);
+        output += `    val ${tokenName} = "${token.value}" // Error parsing\n`;
       }
     });
     output += '\n';
@@ -376,11 +386,16 @@ function generateFlutterOutput(tokens: any): string {
   Object.entries(tokens).forEach(([category, categoryTokens]: [string, any]) => {
     output += `  // ${category}\n`;
     Object.entries(categoryTokens).forEach(([tokenName, token]: [string, any]) => {
-      if (token.type === 'color') {
-        const color = parseColor(token.value);
-        output += `  static const Color ${tokenName} = Color(0x${color.hex});\n`;
-      } else {
-        output += `  static const String ${tokenName} = '${token.value}';\n`;
+      try {
+        if (token.type === 'color') {
+          const color = parseColor(token.value);
+          output += `  static const Color ${tokenName} = Color(0x${color.hex});\n`;
+        } else {
+          output += `  static const String ${tokenName} = '${token.value}';\n`;
+        }
+      } catch (error) {
+        console.error(`Error processing token ${tokenName}:`, error);
+        output += `  static const String ${tokenName} = '${token.value}'; // Error parsing\n`;
       }
     });
     output += '\n';
@@ -414,27 +429,68 @@ function generateJSONOutput(tokens: any): string {
 
 // Helper function to parse color values
 function parseColor(colorValue: string): { r: number, g: number, b: number, a: number, hex: string } {
-  // Handle hex colors
-  if (colorValue.startsWith('#')) {
-    const hex = colorValue.replace('#', '');
-    const r = parseInt(hex.substr(0, 2), 16) / 255;
-    const g = parseInt(hex.substr(2, 2), 16) / 255;
-    const b = parseInt(hex.substr(4, 2), 16) / 255;
-    const a = hex.length === 8 ? parseInt(hex.substr(6, 2), 16) / 255 : 1;
-    return { r, g, b, a, hex: hex.toUpperCase() };
-  }
-  
-  // Handle rgb/rgba colors
-  if (colorValue.startsWith('rgb')) {
-    const values = colorValue.match(/\d+/g);
-    if (values && values.length >= 3) {
-      const r = parseInt(values[0]) / 255;
-      const g = parseInt(values[1]) / 255;
-      const b = parseInt(values[2]) / 255;
-      const a = values[3] ? parseInt(values[3]) / 255 : 1;
-      const hex = ((Math.round(r * 255) << 24) | (Math.round(g * 255) << 16) | (Math.round(b * 255) << 8) | Math.round(a * 255)).toString(16).toUpperCase().padStart(8, '0');
-      return { r, g, b, a, hex };
+  try {
+    // Handle hex colors
+    if (colorValue.startsWith('#')) {
+      let hex = colorValue.replace('#', '');
+      
+      // Handle 3-digit hex (e.g., #FFF)
+      if (hex.length === 3) {
+        hex = hex.split('').map(char => char + char).join('');
+      }
+      
+      // Ensure we have 6 or 8 digits
+      if (hex.length === 6) {
+        hex = 'FF' + hex; // Add alpha if missing
+      }
+      
+      const r = parseInt(hex.substr(2, 2), 16) / 255;
+      const g = parseInt(hex.substr(4, 2), 16) / 255;
+      const b = parseInt(hex.substr(6, 2), 16) / 255;
+      const a = parseInt(hex.substr(0, 2), 16) / 255;
+      
+      return { r, g, b, a, hex: hex.toUpperCase() };
     }
+    
+    // Handle rgb/rgba colors
+    if (colorValue.startsWith('rgb')) {
+      const values = colorValue.match(/\d+(?:\.\d+)?/g);
+      if (values && values.length >= 3) {
+        const r = parseInt(values[0]) / 255;
+        const g = parseInt(values[1]) / 255;
+        const b = parseInt(values[2]) / 255;
+        const a = values[3] ? parseFloat(values[3]) : 1;
+        
+        const r255 = Math.round(r * 255);
+        const g255 = Math.round(g * 255);
+        const b255 = Math.round(b * 255);
+        const a255 = Math.round(a * 255);
+        
+        const hex = ((a255 << 24) | (r255 << 16) | (g255 << 8) | b255).toString(16).toUpperCase().padStart(8, '0');
+        return { r, g, b, a, hex };
+      }
+    }
+    
+    // Handle rgba with decimal values
+    if (colorValue.includes('rgba')) {
+      const values = colorValue.match(/\d+(?:\.\d+)?/g);
+      if (values && values.length >= 4) {
+        const r = parseInt(values[0]) / 255;
+        const g = parseInt(values[1]) / 255;
+        const b = parseInt(values[2]) / 255;
+        const a = parseFloat(values[3]);
+        
+        const r255 = Math.round(r * 255);
+        const g255 = Math.round(g * 255);
+        const b255 = Math.round(b * 255);
+        const a255 = Math.round(a * 255);
+        
+        const hex = ((a255 << 24) | (r255 << 16) | (g255 << 8) | b255).toString(16).toUpperCase().padStart(8, '0');
+        return { r, g, b, a, hex };
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing color:', colorValue, error);
   }
   
   // Default fallback
@@ -443,33 +499,53 @@ function parseColor(colorValue: string): { r: number, g: number, b: number, a: n
 
 // Export Style Dictionary tokens for a specific platform
 async function exportStyleDictionaryTokens(platform: string) {
-  const allVariables = await getAllVariables();
-  
-  // Transform tokens to Style Dictionary format
-  const sdTokens = transformToStyleDictionary(allVariables);
-  
-  // Generate platform-specific output
-  switch (platform) {
-    case 'css':
-      return generateCSSOutput(sdTokens);
-    case 'scss':
-      return generateSCSSOutput(sdTokens);
-    case 'js':
-      return generateJSOutput(sdTokens);
-    case 'ts':
-      return generateTSOutput(sdTokens);
-    case 'ios':
-      return generateiOSOutput(sdTokens);
-    case 'android':
-      return generateAndroidOutput(sdTokens);
-    case 'flutter':
-      return generateFlutterOutput(sdTokens);
-    case 'react-native':
-      return generateReactNativeOutput(sdTokens);
-    case 'json':
-      return generateJSONOutput(sdTokens);
-          default:
-      return generateJSONOutput(sdTokens);
+  try {
+    const allVariables = await getAllVariables();
+    console.log('All variables for platform', platform, ':', allVariables);
+    
+    // Transform tokens to Style Dictionary format
+    const sdTokens = transformToStyleDictionary(allVariables);
+    console.log('Transformed tokens for platform', platform, ':', sdTokens);
+    
+    // Generate platform-specific output
+    let result;
+    switch (platform) {
+      case 'css':
+        result = generateCSSOutput(sdTokens);
+        break;
+      case 'scss':
+        result = generateSCSSOutput(sdTokens);
+        break;
+      case 'js':
+        result = generateJSOutput(sdTokens);
+        break;
+      case 'ts':
+        result = generateTSOutput(sdTokens);
+        break;
+      case 'ios':
+        result = generateiOSOutput(sdTokens);
+        break;
+      case 'android':
+        result = generateAndroidOutput(sdTokens);
+        break;
+      case 'flutter':
+        result = generateFlutterOutput(sdTokens);
+        break;
+      case 'react-native':
+        result = generateReactNativeOutput(sdTokens);
+        break;
+      case 'json':
+        result = generateJSONOutput(sdTokens);
+        break;
+      default:
+        result = generateJSONOutput(sdTokens);
+    }
+    
+    console.log('Generated output for platform', platform, ':', result.substring(0, 200) + '...');
+    return result;
+  } catch (error) {
+    console.error('Error in exportStyleDictionaryTokens for platform', platform, ':', error);
+    throw error;
   }
 }
 
