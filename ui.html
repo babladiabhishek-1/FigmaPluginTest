@@ -675,7 +675,7 @@
               <button id="download-token-studio-btn" class="btn btn-secondary" disabled>Download</button>
             </div>
           </div>
-          <textarea id="token-studio-output" class="output-textarea" readonly placeholder="Token Studio format will appear here when you switch to this tab..."></textarea>
+          <textarea id="token-studio-output" class="output-textarea" readonly tabindex="-1" placeholder="Token Studio format will appear here when you switch to this tab..."></textarea>
           <div class="status" id="token-studio-status">Ready to generate Token Studio format</div>
         </div>
       </div>
@@ -729,7 +729,7 @@
 
       <!-- Output Area -->
       <div id="output-container">
-        <textarea id="json-output" readonly placeholder="Your exported tokens will appear here..."></textarea>
+        <textarea id="json-output" readonly tabindex="-1" placeholder="Your exported tokens will appear here..."></textarea>
         <div class="output-actions">
           <button id="copy-btn" class="btn btn-secondary" disabled>Copy to Clipboard</button>
           <button id="download-btn" class="btn btn-secondary" disabled>Download File</button>
