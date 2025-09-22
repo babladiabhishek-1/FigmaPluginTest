@@ -1680,68 +1680,61 @@ function transformToTokenStudio(tokens: any): any {
     }
   };
 
-  // Step 1: Create primitive color palette
+  // Analyze what collections we actually have
+  const availableCollections = Object.keys(tokens);
+  console.log('Available collections:', availableCollections);
+  
+  // Find collections that contain colors
+  const colorCollections = availableCollections.filter(name => 
+    name.toLowerCase().includes('color') || 
+    name.toLowerCase().includes('paint') ||
+    name.toLowerCase().includes('semantic')
+  );
+  console.log('Color collections found:', colorCollections);
+  
+  // Find collections that contain typography
+  const typographyCollections = availableCollections.filter(name => 
+    name.toLowerCase().includes('typography') || 
+    name.toLowerCase().includes('text') ||
+    name.toLowerCase().includes('font')
+  );
+  console.log('Typography collections found:', typographyCollections);
+  
+  // Find collections that contain spacing/sizing
+  const spatialCollections = availableCollections.filter(name => 
+    name.toLowerCase().includes('spatial') || 
+    name.toLowerCase().includes('size') ||
+    name.toLowerCase().includes('spacing')
+  );
+  console.log('Spatial collections found:', spatialCollections);
+
+  // Step 1: Create primitive color palette dynamically
   const primitiveColors: any = {};
-  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
-    console.log('Processing collection:', collectionName);
+  
+  // Process each color collection
+  colorCollections.forEach(collectionName => {
+    console.log('Processing color collection:', collectionName);
+    const variables = tokens[collectionName];
     
-    // Look for Umain-colors/Value or create it from Paint Styles
-    if (collectionName === 'Umain-colors/Value') {
-      primitiveColors[collectionName] = {};
+    if (collectionName.toLowerCase().includes('paint')) {
+      // Handle Paint Styles - extract primitive colors
+      if (!primitiveColors['Primitive Colors']) {
+        primitiveColors['Primitive Colors'] = {};
+      }
       
       (variables as any[]).forEach((variable: any) => {
-        const nameParts = variable.name.split('/');
-        if (nameParts.length >= 2) {
-          const colorFamily = nameParts[0];
-          const colorShade = nameParts[1];
-          
-          if (!primitiveColors[collectionName][colorFamily]) {
-            primitiveColors[collectionName][colorFamily] = {};
-          }
-          
-          // Convert rgba to 8-digit hex format
-          let colorValue = variable.value;
-          if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-            if (rgbaMatch) {
-              const r = parseInt(rgbaMatch[1]);
-              const g = parseInt(rgbaMatch[2]);
-              const b = parseInt(rgbaMatch[3]);
-              const a = parseFloat(rgbaMatch[4]);
-              
-              // Convert to 8-digit hex
-              const alpha = Math.round(a * 255);
-              colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
-            }
-          } else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
-            // Convert 6-digit hex to 8-digit hex (add FF for full opacity)
-            if (variable.value.length === 7) {
-              colorValue = variable.value + 'FF';
-            }
-          }
-          
-          primitiveColors[collectionName][colorFamily][colorShade] = {
-            value: colorValue,
-            type: 'color'
-          };
-        }
-      });
-    } else if (collectionName === 'Paint Styles') {
-      // Create primitive colors from Paint Styles
-      primitiveColors['Umain-colors/Value'] = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.name && variable.name.startsWith('Umain - colors/')) {
+        if (variable.type === 'PAINT_STYLE' && variable.value) {
+          // Extract color family and shade from name
           const nameParts = variable.name.split('/');
-          if (nameParts.length >= 3) {
-            const colorFamily = nameParts[1]; // e.g., "Greyscale"
-            const colorShade = nameParts[2];  // e.g., "900"
+          if (nameParts.length >= 2) {
+            const colorFamily = nameParts[nameParts.length - 2] || 'Default';
+            const colorShade = nameParts[nameParts.length - 1] || 'default';
             
-            if (!primitiveColors['Umain-colors/Value'][colorFamily]) {
-              primitiveColors['Umain-colors/Value'][colorFamily] = {};
+            if (!primitiveColors['Primitive Colors'][colorFamily]) {
+              primitiveColors['Primitive Colors'][colorFamily] = {};
             }
             
-            // Convert rgba to 8-digit hex format
+            // Convert to 8-digit hex
             let colorValue = variable.value;
             if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
               const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
@@ -1750,19 +1743,57 @@ function transformToTokenStudio(tokens: any): any {
                 const g = parseInt(rgbaMatch[2]);
                 const b = parseInt(rgbaMatch[3]);
                 const a = parseFloat(rgbaMatch[4]);
-                
-                // Convert to 8-digit hex
                 const alpha = Math.round(a * 255);
                 colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
               }
             } else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
-              // Convert 6-digit hex to 8-digit hex (add FF for full opacity)
               if (variable.value.length === 7) {
                 colorValue = variable.value + 'FF';
               }
             }
             
-            primitiveColors['Umain-colors/Value'][colorFamily][colorShade] = {
+            primitiveColors['Primitive Colors'][colorFamily][colorShade] = {
+              value: colorValue,
+              type: 'color'
+            };
+          }
+        }
+      });
+    } else if (collectionName.toLowerCase().includes('color') && !collectionName.toLowerCase().includes('semantic')) {
+      // Handle direct color collections
+      const primitiveName = collectionName.replace(/[^a-zA-Z0-9]/g, ' ') + '/Value';
+      primitiveColors[primitiveName] = {};
+      
+      (variables as any[]).forEach((variable: any) => {
+        if (variable.type === 'COLOR' && variable.value) {
+          const nameParts = variable.name.split('/');
+          if (nameParts.length >= 2) {
+            const colorFamily = nameParts[0];
+            const colorShade = nameParts[1];
+            
+            if (!primitiveColors[primitiveName][colorFamily]) {
+              primitiveColors[primitiveName][colorFamily] = {};
+            }
+            
+            // Convert to 8-digit hex
+            let colorValue = variable.value;
+            if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+              const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+              if (rgbaMatch) {
+                const r = parseInt(rgbaMatch[1]);
+                const g = parseInt(rgbaMatch[2]);
+                const b = parseInt(rgbaMatch[3]);
+                const a = parseFloat(rgbaMatch[4]);
+                const alpha = Math.round(a * 255);
+                colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+              }
+            } else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
+              if (variable.value.length === 7) {
+                colorValue = variable.value + 'FF';
+              }
+            }
+            
+            primitiveColors[primitiveName][colorFamily][colorShade] = {
               value: colorValue,
               type: 'color'
             };
@@ -1772,89 +1803,65 @@ function transformToTokenStudio(tokens: any): any {
     }
   });
 
-  // Step 2: Create semantic color sets with references
+  // Step 2: Create semantic color sets with references dynamically
   const semanticColorsLight: any = {};
   const semanticColorsDark: any = {};
   
-  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
-    if (collectionName === 'Paint Styles') {
+  // Process semantic color collections
+  colorCollections.forEach(collectionName => {
+    if (collectionName.toLowerCase().includes('semantic')) {
+      console.log('Processing semantic collection:', collectionName);
+      const variables = tokens[collectionName];
+      
       (variables as any[]).forEach((variable: any) => {
-        if (variable.name.startsWith('light/')) {
-          const path = variable.name.replace('light/', '').split('/');
-          if (path.length >= 2) {
-            const category = path[0];
-            const subcategory = path[1];
+        if (variable.type === 'COLOR' && variable.value) {
+          // Check if this is a Light or Dark mode variable
+          const isLight = variable.modes && variable.modes.some((mode: string) => 
+            mode.toLowerCase().includes('light') || mode.toLowerCase().includes('original')
+          );
+          const isDark = variable.modes && variable.modes.some((mode: string) => 
+            mode.toLowerCase().includes('dark')
+          );
+          
+          // Parse the variable name to extract category and subcategory
+          const nameParts = variable.name.split('/');
+          if (nameParts.length >= 2) {
+            const category = nameParts[0];
+            const subcategory = nameParts[1];
             
-            if (!semanticColorsLight[category]) {
-              semanticColorsLight[category] = {};
+            // Create reference to primitive color
+            const primitiveRef = Object.keys(primitiveColors)[0]; // Use first primitive collection
+            const colorFamily = 'Greyscale'; // Default fallback
+            const colorShade = '500'; // Default fallback
+            
+            const reference = `{${primitiveRef}.${colorFamily}.${colorShade}}`;
+            
+            if (isLight) {
+              if (!semanticColorsLight[category]) {
+                semanticColorsLight[category] = {};
+              }
+              semanticColorsLight[category][subcategory] = {
+                value: reference,
+                type: 'color'
+              };
             }
             
-            // Map to primitive color references
-            let reference = '';
-            if (variable.name.includes('brand')) {
-              reference = '{Umain-colors.Value.Gold.400}';
-            } else if (variable.name.includes('primary')) {
-              reference = '{Umain-colors.Value.Greyscale.900}';
-            } else if (variable.name.includes('secondary')) {
-              reference = '{Umain-colors.Value.Greyscale.700}';
-            } else if (variable.name.includes('accent')) {
-              reference = '{Umain-colors.Value.Gold.400}';
-            } else if (variable.name.includes('error')) {
-              reference = '{Umain-colors.Value.Red.400}';
-            } else if (variable.name.includes('success')) {
-              reference = '{Umain-colors.Value.Green.400}';
-            } else if (variable.name.includes('warning')) {
-              reference = '{Umain-colors.Value.Orange.400}';
-            } else {
-              reference = '{Umain-colors.Value.Greyscale.500}'; // fallback
+            if (isDark) {
+              if (!semanticColorsDark[category]) {
+                semanticColorsDark[category] = {};
+              }
+              semanticColorsDark[category][subcategory] = {
+                value: reference,
+                type: 'color'
+              };
             }
-            
-            semanticColorsLight[category][subcategory] = {
-              value: reference,
-              type: 'color'
-            };
-          }
-        } else if (variable.name.startsWith('dark/')) {
-          const path = variable.name.replace('dark/', '').split('/');
-          if (path.length >= 2) {
-            const category = path[0];
-            const subcategory = path[1];
-            
-            if (!semanticColorsDark[category]) {
-              semanticColorsDark[category] = {};
-            }
-            
-            // Map to primitive color references
-            let reference = '';
-            if (variable.name.includes('brand')) {
-              reference = '{Umain-colors.Value.Gold.400}';
-            } else if (variable.name.includes('primary')) {
-              reference = '{Umain-colors.Value.Greyscale.100}';
-            } else if (variable.name.includes('secondary')) {
-              reference = '{Umain-colors.Value.Greyscale.300}';
-            } else if (variable.name.includes('accent')) {
-              reference = '{Umain-colors.Value.Gold.400}';
-            } else if (variable.name.includes('error')) {
-              reference = '{Umain-colors.Value.Red.400}';
-            } else if (variable.name.includes('success')) {
-              reference = '{Umain-colors.Value.Green.400}';
-            } else if (variable.name.includes('warning')) {
-              reference = '{Umain-colors.Value.Orange.400}';
-            } else {
-              reference = '{Umain-colors.Value.Greyscale.500}'; // fallback
-            }
-            
-            semanticColorsDark[category][subcategory] = {
-              value: reference,
-              type: 'color'
-            };
           }
         }
       });
     }
   });
 
-  // Step 3: Create typography primitives
+  // Step 3: Create typography primitives dynamically
   const typographyPrimitives: any = {
     'font-family': {},
     'font-size': {},
@@ -1863,10 +1870,13 @@ function transformToTokenStudio(tokens: any): any {
     'line-height': {}
   };
 
-  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
+  // Process typography collections
+  typographyCollections.forEach(collectionName => {
     console.log('Processing typography collection:', collectionName);
-    if (collectionName === 'Umain-typography') {
-      (variables as any[]).forEach((variable: any) => {
+    const variables = tokens[collectionName];
+    
+    (variables as any[]).forEach((variable: any) => {
+      if (variable.type === 'STRING' || variable.type === 'FLOAT') {
         const nameParts = variable.name.split('/');
         if (nameParts.length >= 2) {
           const category = nameParts[0];
@@ -1875,12 +1885,12 @@ function transformToTokenStudio(tokens: any): any {
           if (typographyPrimitives[category]) {
             typographyPrimitives[category][token] = {
               value: variable.value,
-              type: 'dimension'
+              type: variable.type === 'STRING' ? 'string' : 'dimension'
             };
           }
         }
-      });
-    }
+      }
+    });
   });
 
   // Step 4: Create composite typography styles
@@ -1925,67 +1935,106 @@ function transformToTokenStudio(tokens: any): any {
     }
   });
 
-  // Step 5: Create context-aware spatial sets
+  // Step 5: Create context-aware spatial sets dynamically
   const spatialPortrait: any = {};
   const spatialLandscape: any = {};
   
-  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
-    if (collectionName === 'Semantic Spatial') {
-      (variables as any[]).forEach((variable: any) => {
+  // Process spatial collections
+  spatialCollections.forEach(collectionName => {
+    console.log('Processing spatial collection:', collectionName);
+    const variables = tokens[collectionName];
+    
+    (variables as any[]).forEach((variable: any) => {
+      if (variable.type === 'FLOAT' || variable.type === 'DIMENSION') {
         // Portrait values (default)
         spatialPortrait[variable.name] = {
           value: variable.value,
           type: 'dimension'
         };
         
-        // Landscape values (adjusted)
+        // Landscape values (adjusted based on common patterns)
         let landscapeValue = variable.value;
-        if (variable.name === 'maxImWideWidth') {
-          landscapeValue = 220;
-        } else if (variable.name === 'maxHeroBannerWidth') {
-          landscapeValue = 500;
-        } else if (variable.name === 'maxDealCardWidth') {
-          landscapeValue = 500;
+        if (variable.name.toLowerCase().includes('width') && typeof variable.value === 'number') {
+          // Reduce width values for landscape
+          landscapeValue = Math.round(variable.value * 0.6);
+        } else if (variable.name.toLowerCase().includes('height') && typeof variable.value === 'number') {
+          // Increase height values for landscape
+          landscapeValue = Math.round(variable.value * 1.2);
         }
-        // Add more landscape-specific adjustments as needed
         
         spatialLandscape[variable.name] = {
           value: landscapeValue,
           type: 'dimension'
         };
-      });
-    }
+      }
+    });
   });
 
-  // Combine all sets
+  // Combine all sets dynamically
   Object.assign(tokenStudio, primitiveColors);
-  tokenStudio['Umain-typography/Original'] = typographyPrimitives;
-  tokenStudio['Umain - semantic Colors/Light'] = semanticColorsLight;
-  tokenStudio['Umain - semantic Colors/Dark'] = semanticColorsDark;
-  tokenStudio['Semantic Spatial/portrait'] = spatialPortrait;
-  tokenStudio['Semantic Spatial/landscape'] = spatialLandscape;
-  tokenStudio['Umain-typo tokens/Original'] = compositeTypography;
+  
+  // Add typography if we have any
+  if (Object.keys(typographyPrimitives).some(cat => Object.keys(typographyPrimitives[cat]).length > 0)) {
+    tokenStudio['Typography/Original'] = typographyPrimitives;
+  }
+  
+  // Add semantic colors if we have any
+  if (Object.keys(semanticColorsLight).length > 0) {
+    tokenStudio['Semantic Colors/Light'] = semanticColorsLight;
+  }
+  if (Object.keys(semanticColorsDark).length > 0) {
+    tokenStudio['Semantic Colors/Dark'] = semanticColorsDark;
+  }
+  
+  // Add spatial sets if we have any
+  if (Object.keys(spatialPortrait).length > 0) {
+    tokenStudio['Spatial/Portrait'] = spatialPortrait;
+  }
+  if (Object.keys(spatialLandscape).length > 0) {
+    tokenStudio['Spatial/Landscape'] = spatialLandscape;
+  }
+  
+  // Add composite typography if we have any
+  if (Object.keys(compositeTypography).length > 0) {
+    tokenStudio['Typography Tokens/Original'] = compositeTypography;
+  }
 
   // Add fallback if no primitive colors were found
-  if (!primitiveColors['Umain-colors/Value']) {
-    tokenStudio['Umain-colors/Value'] = {
+  if (Object.keys(primitiveColors).length === 0) {
+    tokenStudio['Primitive Colors'] = {
       'Greyscale': {
         '100': { value: '#f9f9f9FF', type: 'color' },
+        '500': { value: '#959595FF', type: 'color' },
         '900': { value: '#1b1b1bFF', type: 'color' }
       }
     };
   }
 
-  // Set metadata
-  tokenStudio.$metadata.tokenSetOrder = [
-    'Umain-colors/Value',
-    'Umain-typography/Original',
-    'Umain - semantic Colors/Light',
-    'Umain - semantic Colors/Dark',
-    'Semantic Spatial/portrait',
-    'Semantic Spatial/landscape',
-    'Umain-typo tokens/Original'
-  ];
+  // Set metadata dynamically based on what we actually created
+  const tokenSetOrder = [];
+  if (Object.keys(primitiveColors).length > 0) {
+    tokenSetOrder.push(...Object.keys(primitiveColors));
+  }
+  if (Object.keys(typographyPrimitives).some(cat => Object.keys(typographyPrimitives[cat]).length > 0)) {
+    tokenSetOrder.push('Typography/Original');
+  }
+  if (Object.keys(semanticColorsLight).length > 0) {
+    tokenSetOrder.push('Semantic Colors/Light');
+  }
+  if (Object.keys(semanticColorsDark).length > 0) {
+    tokenSetOrder.push('Semantic Colors/Dark');
+  }
+  if (Object.keys(spatialPortrait).length > 0) {
+    tokenSetOrder.push('Spatial/Portrait');
+  }
+  if (Object.keys(spatialLandscape).length > 0) {
+    tokenSetOrder.push('Spatial/Landscape');
+  }
+  if (Object.keys(compositeTypography).length > 0) {
+    tokenSetOrder.push('Typography Tokens/Original');
+  }
+  
+  tokenStudio.$metadata.tokenSetOrder = tokenSetOrder;
 
   console.log('Token Studio structure created:', Object.keys(tokenStudio));
   
