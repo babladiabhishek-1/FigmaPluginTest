@@ -749,7 +749,7 @@ async function getAllVariables() {
       };
     });
 
-    // Build categorized variables for export
+    // Build categorized variables for UI display (flat structure with arrays)
     const categorizedVariables: any = {};
 
     // Export loop: emit collection/mode → nested path and log every decision
@@ -759,6 +759,11 @@ async function getAllVariables() {
       for (const mode of coll.modes) {
         const setKey = `${coll.name}/${mode.name}`;
         
+        // Initialize array for this collection/mode
+        if (!categorizedVariables[setKey]) {
+          categorizedVariables[setKey] = [];
+        }
+        
         for (const v of varsInColl) {
           const res = resolveForMode(v.id, mode.modeId, variablesById, idToPath);
           if (!res) { 
@@ -766,13 +771,19 @@ async function getAllVariables() {
             continue; 
           }
           
-          const path = v.name.split('/').map(s => s.trim()).filter(Boolean);
-          const entry: any = { $value: res.finalValue, $type: res.finalType };
-          if (v.description?.trim()) entry.$description = v.description.trim();
+          // Create variable data for UI display
+          const variableData = {
+            id: v.id,
+            name: v.name,
+            type: res.finalType,
+            value: res.finalValue,
+            collection: coll.name,
+            mode: mode.name,
+            description: v.description || ''
+          };
           
-          // Use setDeep to create nested structure
-          setDeep(categorizedVariables, [setKey, ...path], entry);
-          d('EMIT', { setKey, path: path.join('/'), type: res.finalType, value: res.finalValue, chain: res.chain });
+          categorizedVariables[setKey].push(variableData);
+          d('EMIT', { setKey, path: v.name, type: res.finalType, value: res.finalValue, chain: res.chain });
         }
       }
     }

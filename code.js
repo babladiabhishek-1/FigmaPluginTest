@@ -610,7 +610,7 @@ function e(t, ...args) { if (DEBUG)
     console.error(tag(`ERR:${t}`), ...S, ...args); }
 // Get all available variables for the side pane with categorization
 async function getAllVariables() {
-    var _a, _b;
+    var _a;
     try {
         // Get Figma variables and collections
         const variables = await figma.variables.getLocalVariablesAsync();
@@ -651,26 +651,35 @@ async function getAllVariables() {
                 modes
             };
         });
-        // Build categorized variables for export
+        // Build categorized variables for UI display (flat structure with arrays)
         const categorizedVariables = {};
         // Export loop: emit collection/mode → nested path and log every decision
         for (const coll of variableCollections) {
             const varsInColl = variables.filter(v => v.variableCollectionId === coll.id);
             for (const mode of coll.modes) {
                 const setKey = `${coll.name}/${mode.name}`;
+                // Initialize array for this collection/mode
+                if (!categorizedVariables[setKey]) {
+                    categorizedVariables[setKey] = [];
+                }
                 for (const v of varsInColl) {
                     const res = resolveForMode(v.id, mode.modeId, variablesById, idToPath);
                     if (!res) {
                         w('EmitSkip', { name: v.name, setKey, reason: 'resolveForMode=null' });
                         continue;
                     }
-                    const path = v.name.split('/').map(s => s.trim()).filter(Boolean);
-                    const entry = { $value: res.finalValue, $type: res.finalType };
-                    if ((_a = v.description) === null || _a === void 0 ? void 0 : _a.trim())
-                        entry.$description = v.description.trim();
-                    // Use setDeep to create nested structure
-                    setDeep(categorizedVariables, [setKey, ...path], entry);
-                    d('EMIT', { setKey, path: path.join('/'), type: res.finalType, value: res.finalValue, chain: res.chain });
+                    // Create variable data for UI display
+                    const variableData = {
+                        id: v.id,
+                        name: v.name,
+                        type: res.finalType,
+                        value: res.finalValue,
+                        collection: coll.name,
+                        mode: mode.name,
+                        description: v.description || ''
+                    };
+                    categorizedVariables[setKey].push(variableData);
+                    d('EMIT', { setKey, path: v.name, type: res.finalType, value: res.finalValue, chain: res.chain });
                 }
             }
         }
@@ -682,7 +691,7 @@ async function getAllVariables() {
                 const paint = style.paints[0];
                 if (paint.type === 'SOLID') {
                     const { r, g, b } = paint.color;
-                    const a = (_b = paint.opacity) !== null && _b !== void 0 ? _b : 1;
+                    const a = (_a = paint.opacity) !== null && _a !== void 0 ? _a : 1;
                     const red = Math.round(r * 255);
                     const green = Math.round(g * 255);
                     const blue = Math.round(b * 255);
