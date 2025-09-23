@@ -588,79 +588,76 @@ async function getAllVariables() {
     console.log('Found variables:', localVariables.length);
     console.log('Collection details:', collections.map(c => ({ name: c.name, variableCount: c.variableIds.length })));
     
-    for (const variable of localVariables) {
-      const collection = collections.find(c => c.variableIds.includes(variable.id));
-      const modes = collection ? collection.modes : [];
-      
-      // Get the actual value from the first mode
-      let actualValue = null;
-      if (modes.length > 0) {
-        const firstModeId = modes[0].modeId;
-        const value = variable.valuesByMode[firstModeId];
+    // Build a map of variables by ID for alias resolution
+    const variablesById = new Map(localVariables.map(v => [v.id, v]));
+    
+    for (const collection of collections) {
+      for (const mode of collection.modes) {
+        const setKey = `${collection.name}/${mode.name}`;
         
-        if (value !== undefined) {
-          // Handle different value types
-          if (typeof value === 'object' && value !== null) {
-            if ('type' in value && value.type === 'VARIABLE_ALIAS') {
-              // This is a reference to another variable
-              try {
-                const referencedVariable = await figma.variables.getVariableByIdAsync(value.id);
+        for (const variableId of collection.variableIds) {
+          const variable = variablesById.get(variableId);
+          if (!variable) continue;
+          
+          const value = variable.valuesByMode[mode.modeId];
+          let actualValue = null;
+        
+          if (value !== undefined) {
+            // Handle different value types
+            if (typeof value === 'object' && value !== null) {
+              if ('type' in value && value.type === 'VARIABLE_ALIAS') {
+                // This is a reference to another variable
+                const referencedVariable = variablesById.get(value.id);
                 if (referencedVariable) {
-                  const referencedValue = referencedVariable.valuesByMode[firstModeId];
+                  const referencedValue = referencedVariable.valuesByMode[mode.modeId];
                   actualValue = referencedValue;
                 } else {
                   actualValue = value;
                 }
-              } catch (error) {
-                console.warn(`Could not resolve variable reference for ${variable.name}:`, error);
+              } else if ('r' in value && 'g' in value && 'b' in value) {
+                // This is a color object with r, g, b, a values
+                const r = Math.round(value.r * 255);
+                const g = Math.round(value.g * 255);
+                const b = Math.round(value.b * 255);
+                const a = 'a' in value ? value.a : 1;
+                actualValue = `rgba(${r}, ${g}, ${b}, ${a})`;
+              } else {
                 actualValue = value;
               }
-            } else if ('r' in value && 'g' in value && 'b' in value) {
-              // This is a color object with r, g, b, a values
-              const r = Math.round(value.r * 255);
-              const g = Math.round(value.g * 255);
-              const b = Math.round(value.b * 255);
-              const a = 'a' in value ? value.a : 1;
-              actualValue = `rgba(${r}, ${g}, ${b}, ${a})`;
             } else {
               actualValue = value;
             }
-          } else {
-            actualValue = value;
           }
+          
+          console.log(`Variable ${variable.name} details:`, {
+            resolvedType: variable.resolvedType,
+            actualValue: actualValue,
+            collection: collection.name,
+            mode: mode.name
+          });
+          
+          const variableData = {
+            id: variable.id,
+            name: variable.name,
+            type: variable.resolvedType || 'VARIABLE',
+            value: actualValue,
+            collection: collection.name,
+            mode: mode.name,
+            description: variable.description || ''
+          };
+          
+          // Add to all variables list
+          allVariables.push(variableData);
+          
+          // Use the setKey (collection/mode) for categorization
+          console.log(`Variable ${variable.name} assigned to collection: ${setKey} (collection found: true)`);
+          
+          if (!categorizedVariables[setKey]) {
+            categorizedVariables[setKey] = [];
+          }
+          categorizedVariables[setKey].push(variableData);
         }
       }
-      
-      // Keep all line-height values in their respective collections
-      // Each collection serves different purposes and should maintain its own line-height values
-      
-      console.log(`Variable ${variable.name} details:`, {
-        resolvedType: variable.resolvedType,
-        actualValue: actualValue,
-        collection: collection?.name
-      });
-      
-      const variableData = {
-        id: variable.id,
-        name: variable.name,
-        type: variable.resolvedType || 'VARIABLE',
-        value: actualValue,
-        collection: collection?.name || 'Unknown',
-        modes: modes.map(m => m.name),
-        description: variable.description || ''
-      };
-      
-      // Add to all variables list
-      allVariables.push(variableData);
-      
-      // Use the actual collection name from Figma
-      const collectionName = collection?.name || 'Unknown';
-      console.log(`Variable ${variable.name} assigned to collection: ${collectionName} (collection found: ${!!collection})`);
-      
-      if (!categorizedVariables[collectionName]) {
-        categorizedVariables[collectionName] = [];
-      }
-      categorizedVariables[collectionName].push(variableData);
     }
     
     // Get paint styles
