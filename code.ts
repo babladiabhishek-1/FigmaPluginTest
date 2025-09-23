@@ -592,8 +592,17 @@ function resolveVariableAlias(variableId: string, modeId: string, variablesById:
     return null;
   }
   
+  console.log(`🔗 Resolving alias for variable ${variable.name} (depth ${depth}):`, {
+    variableId,
+    modeId,
+    value,
+    valueType: typeof value,
+    isAlias: typeof value === 'object' && value !== null && 'type' in value && value.type === 'VARIABLE_ALIAS'
+  });
+  
   // If it's another alias, resolve it recursively
   if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'VARIABLE_ALIAS') {
+    console.log(`🔄 Following alias chain: ${variable.name} -> ${value.id}`);
     return resolveVariableAlias(value.id, modeId, variablesById, depth + 1);
   }
   
@@ -603,10 +612,13 @@ function resolveVariableAlias(variableId: string, modeId: string, variablesById:
     const g = Math.round(value.g * 255);
     const b = Math.round(value.b * 255);
     const a = 'a' in value ? value.a : 1;
-    return `rgba(${r}, ${g}, ${b}, ${a})`;
+    const result = `rgba(${r}, ${g}, ${b}, ${a})`;
+    console.log(`🎨 Converted color for ${variable.name}:`, result);
+    return result;
   }
   
   // Return the resolved value
+  console.log(`✅ Resolved value for ${variable.name}:`, value);
   return value;
 }
 
@@ -1709,11 +1721,13 @@ function transformToTokenStudio(tokens: any): any {
         
         // Debug color collections specifically
         if (baseCollectionName.includes('Palette') || baseCollectionName.includes('Semantic') || baseCollectionName.includes('Gradient')) {
-          console.log(`Color collection variable "${variable.name}":`, {
+          console.log(`🔍 Color collection variable "${variable.name}":`, {
             value: variable.value,
             type: variable.type,
             collection: variable.collection,
-            mode: variable.mode
+            mode: variable.mode,
+            hasValue: variable.value !== null && variable.value !== undefined,
+            valueType: typeof variable.value
           });
         }
         
