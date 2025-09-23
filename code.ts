@@ -19,12 +19,44 @@ type ModeValue =
   | { type:'VARIABLE_ALIAS'; id:string };
 
 // ==== UTILITIES ====
+// Color conversion utilities - SINGLE SOURCE OF TRUTH
 const toHex = (n:number)=>Math.round(n*255).toString(16).padStart(2,'0').toLowerCase();
 const rgbaToHex = ({r,g,b,a}:ColorRGBA)=>`#${toHex(r)}${toHex(g)}${toHex(b)}${a<1?toHex(a):''}`;
 
+// Hex to RGBA conversion (0-1 range for Figma)
+const hexToRgba01 = (hex: string): { r: number, g: number, b: number, a: number } => {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const a = hex.length === 9 ? parseInt(hex.slice(7, 9), 16) / 255 : 1;
+  return { r, g, b, a };
+};
+
+// Hex to RGBA conversion (0-255 range)
+const hexToRgba255 = (hex: string): { r: number, g: number, b: number, a: number } => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const a = hex.length === 9 ? parseInt(hex.slice(7, 9), 16) : 255;
+  return { r, g, b, a };
+};
+
+// Flutter color conversion
+const hexToFlutterColor = (hex: string): string => {
+  const { r, g, b, a } = hexToRgba255(hex);
+  const a255 = a;
+  const r255 = r;
+  const g255 = g;
+  const b255 = b;
+  const hexValue = ((a255 << 24) | (r255 << 16) | (g255 << 8) | b255).toString(16).toUpperCase().padStart(8, '0');
+  return `0x${hexValue}`;
+};
+
+// Type mapping utility
 const typeMap = (t:'COLOR'|'FLOAT'|'STRING'|'BOOLEAN') =>
   t==='COLOR'?'color':t==='FLOAT'?'number':t.toLowerCase();
 
+// Deep object setter utility
 function setDeep(obj:any, path:string[], value:any) {
   let cur = obj;
   for (let i=0; i<path.length-1; i++) {
@@ -67,18 +99,6 @@ function base64Encode(str: string): string {
 // --- UTILITY FUNCTIONS ---
 
 
-// Helper to set a value in a nested object based on a path array
-function setNestedObjectValue(obj: any, path: string[], value: any): void {
-  let current = obj;
-  for (let i = 0; i < path.length - 1; i++) {
-    const key = path[i];
-    if (!current[key] || typeof current[key] !== 'object') {
-      current[key] = {};
-    }
-    current = current[key];
-  }
-  current[path[path.length - 1]] = value;
-}
 
 
 // --- MAIN EXPORT LOGIC ---
@@ -159,7 +179,7 @@ async function exportTokens() {
 
         // Use the token set name for modes (e.g., "Semantic Colors/Light")
         const fullPath = [tokenSetName, ...path];
-        setNestedObjectValue(allTokens, fullPath, token);
+        setDeep(allTokens, fullPath, token);
       }
     }
   }
@@ -185,7 +205,7 @@ async function exportTokens() {
         if (style.description) {
           token['$description'] = style.description;
         }
-        setNestedObjectValue(allTokens, path, token);
+        setDeep(allTokens, path, token);
       }
     }
   }
@@ -922,9 +942,7 @@ struct ColorTokens {
 `;
     Object.entries(colors).forEach(([key, value]) => {
       const hexColor = value as string;
-      const r = parseInt(hexColor.slice(1, 3), 16) / 255;
-      const g = parseInt(hexColor.slice(3, 5), 16) / 255;
-      const b = parseInt(hexColor.slice(5, 7), 16) / 255;
+      const { r, g, b } = hexToRgba01(hexColor);
       swiftCode += `    static let ${key} = UIColor(red: ${r}, green: ${g}, blue: ${b}, alpha: 1.0)\n`;
     });
   }
@@ -1037,9 +1055,7 @@ object ColorTokens {
   if (Object.keys(colors).length > 0) {
     Object.entries(colors).forEach(([key, value]) => {
       const hexColor = value as string;
-      const r = parseInt(hexColor.slice(1, 3), 16);
-      const g = parseInt(hexColor.slice(3, 5), 16);
-      const b = parseInt(hexColor.slice(5, 7), 16);
+      const { r, g, b } = hexToRgba255(hexColor);
       kotlinCode += `    val ${key} = Color(0xFF${hexColor.slice(1).toUpperCase()})\n`;
     });
   }
@@ -1428,9 +1444,7 @@ class DesignTokens {
 `;
     Object.entries(colors).forEach(([key, value]) => {
       const hexColor = value as string;
-      const r = parseInt(hexColor.slice(1, 3), 16);
-      const g = parseInt(hexColor.slice(3, 5), 16);
-      const b = parseInt(hexColor.slice(5, 7), 16);
+      const { r, g, b } = hexToRgba255(hexColor);
       flutterCode += `    '${key}': Color(0xFF${hexColor.slice(1).toUpperCase()}),\n`;
     });
     flutterCode += `  };\n\n`;
