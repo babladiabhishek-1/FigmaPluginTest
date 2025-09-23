@@ -1,20 +1,20 @@
 "use strict";
 // This file holds the main code for the plugin. It has access to the Figma API.
-// ==== DEBUG UTIL ====
+// ==== PLUGIN UTILITIES (SINGLE SOURCE OF TRUTH) ====
+// Debug utilities
 const DEBUG = true;
-const tag = (t) => `[%c${t}%c]`;
-const S = ['color:#9ae6b4;font-weight:700', 'color:inherit'];
+const debugTag = (t) => `[%c${t}%c]`;
+const debugStyles = ['color:#9ae6b4;font-weight:700', 'color:inherit'];
 function d(t, ...args) { if (DEBUG)
-    console.log(tag(t), ...S, ...args); }
+    console.log(debugTag(t), ...debugStyles, ...args); }
 function w(t, ...args) { if (DEBUG)
-    console.warn(tag(`WARN:${t}`), ...S, ...args); }
+    console.warn(debugTag(`WARN:${t}`), ...debugStyles, ...args); }
 function e(t, ...args) { if (DEBUG)
-    console.error(tag(`ERR:${t}`), ...S, ...args); }
-// ==== UTILITIES ====
-// Color conversion utilities - SINGLE SOURCE OF TRUTH
-const toHex = (n) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
-const rgbaToHex = ({ r, g, b, a }) => `#${toHex(r)}${toHex(g)}${toHex(b)}${a < 1 ? toHex(a) : ''}`;
-// Hex to RGBA conversion (0-1 range for Figma)
+    console.error(debugTag(`ERR:${t}`), ...debugStyles, ...args); }
+// Color utilities
+const numberToHex = (n) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
+const colorToHex = ({ r, g, b, a }) => `#${numberToHex(r)}${numberToHex(g)}${numberToHex(b)}${a < 1 ? numberToHex(a) : ''}`;
+// Hex conversion utilities
 const hexToRgba01 = (hex) => {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -22,7 +22,6 @@ const hexToRgba01 = (hex) => {
     const a = hex.length === 9 ? parseInt(hex.slice(7, 9), 16) / 255 : 1;
     return { r, g, b, a };
 };
-// Hex to RGBA conversion (0-255 range)
 const hexToRgba255 = (hex) => {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
@@ -30,28 +29,24 @@ const hexToRgba255 = (hex) => {
     const a = hex.length === 9 ? parseInt(hex.slice(7, 9), 16) : 255;
     return { r, g, b, a };
 };
-// Flutter color conversion
 const hexToFlutterColor = (hex) => {
     const { r, g, b, a } = hexToRgba255(hex);
-    const a255 = a;
-    const r255 = r;
-    const g255 = g;
-    const b255 = b;
-    const hexValue = ((a255 << 24) | (r255 << 16) | (g255 << 8) | b255).toString(16).toUpperCase().padStart(8, '0');
+    const hexValue = ((a << 24) | (r << 16) | (g << 8) | b).toString(16).toUpperCase().padStart(8, '0');
     return `0x${hexValue}`;
 };
 // Type mapping utility
-const typeMap = (t) => t === 'COLOR' ? 'color' : t === 'FLOAT' ? 'number' : t.toLowerCase();
-// Deep object setter utility
+const mapVariableType = (t) => t === 'COLOR' ? 'color' : t === 'FLOAT' ? 'number' : t.toLowerCase();
+// Object utilities
 function setDeep(obj, path, value) {
-    let cur = obj;
+    let current = obj;
     for (let i = 0; i < path.length - 1; i++) {
-        const k = path[i];
-        if (!cur[k] || typeof cur[k] !== 'object' || Array.isArray(cur[k]))
-            cur[k] = {};
-        cur = cur[k];
+        const key = path[i];
+        if (!current[key] || typeof current[key] !== 'object' || Array.isArray(current[key])) {
+            current[key] = {};
+        }
+        current = current[key];
     }
-    cur[path[path.length - 1]] = value;
+    current[path[path.length - 1]] = value;
 }
 // Show the plugin UI with larger size
 figma.showUI(__html__, { width: 1000, height: 600 });
@@ -117,7 +112,7 @@ async function exportTokens() {
                         }
                         else {
                             const { r, g, b, a } = value;
-                            token.$value = rgbaToHex({ r, g, b, a });
+                            token.$value = colorToHex({ r, g, b, a });
                         }
                         break;
                     case 'FLOAT':
@@ -162,7 +157,7 @@ async function exportTokens() {
                 const { r, g, b } = paint.color;
                 const a = (_a = paint.opacity) !== null && _a !== void 0 ? _a : 1;
                 const token = {
-                    $value: rgbaToHex({ r, g, b, a }),
+                    $value: colorToHex({ r, g, b, a }),
                     $type: 'color'
                 };
                 if (style.description) {
@@ -561,7 +556,7 @@ function resolveForMode(varId, modeId, variablesById, idToPath, seen = new Set()
         return { finalType: res.finalType, finalValue: res.finalValue, chain: [v.name, ...res.chain] };
     }
     if (raw.type === 'COLOR') {
-        const hex = rgbaToHex(raw.value);
+        const hex = colorToHex(raw.value);
         d('RESOLVE/color', { name: v.name, hex });
         return { finalType: 'color', finalValue: hex, chain: [v.name] };
     }
