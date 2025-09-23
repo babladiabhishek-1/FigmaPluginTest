@@ -1469,97 +1469,117 @@ function transformToTokenStudio(tokens) {
             tokenSetOrder: []
         }
     };
-    // Process each collection directly from Figma
-    console.log('Available collections for Token Studio:', Object.keys(tokens));
-    Object.entries(tokens).forEach(([collectionName, variables]) => {
-        console.log(`Processing collection: ${collectionName} with ${variables.length} variables`);
-        console.log(`First few variables in ${collectionName}:`, variables.slice(0, 3));
-        // Dynamically process any collection based on its content
+    // Group collections by base name (before the slash)
+    const groupedCollections = {};
+    Object.entries(tokens).forEach(([collectionModeKey, variables]) => {
+        const [baseCollectionName, modeName] = collectionModeKey.split('/');
+        if (!groupedCollections[baseCollectionName]) {
+            groupedCollections[baseCollectionName] = {};
+        }
+        groupedCollections[baseCollectionName][modeName] = variables;
+    });
+    console.log('Grouped collections:', Object.keys(groupedCollections));
+    // Process each base collection
+    Object.entries(groupedCollections).forEach(([baseCollectionName, modes]) => {
+        console.log(`Processing base collection "${baseCollectionName}" with modes:`, Object.keys(modes));
         const collectionTokens = {};
-        variables.forEach((variable) => {
-            console.log(`Processing variable "${variable.name}" in collection "${collectionName}":`, {
-                type: variable.type,
-                value: variable.value,
-                hasValue: variable.value !== null && variable.value !== undefined
-            });
-            if (variable.value !== null && variable.value !== undefined) {
-                // Determine the token type based on variable type
-                let tokenType = 'other';
-                switch (variable.type) {
-                    case 'COLOR':
-                    case 'PAINT_STYLE':
-                        tokenType = 'color';
-                        break;
-                    case 'FLOAT':
-                    case 'DIMENSION':
-                        tokenType = 'number';
-                        break;
-                    case 'STRING':
-                        tokenType = 'string';
-                        break;
-                    case 'BOOLEAN':
-                        tokenType = 'boolean';
-                        break;
-                }
-                // Convert color values to proper hex format
-                let tokenValue = variable.value;
-                if (tokenType === 'color') {
-                    console.log(`Processing color variable "${variable.name}":`, {
-                        originalValue: variable.value,
-                        valueType: typeof variable.value
+        // Process each mode within the collection
+        Object.entries(modes).forEach(([modeName, variables]) => {
+            console.log(`Processing mode "${modeName}" in collection "${baseCollectionName}" with ${variables.length} variables`);
+            variables.forEach((variable) => {
+                console.log(`Processing variable "${variable.name}" in collection "${baseCollectionName}/${modeName}":`, {
+                    type: variable.type,
+                    value: variable.value,
+                    hasValue: variable.value !== null && variable.value !== undefined
+                });
+                // Debug color collections specifically
+                if (baseCollectionName.includes('Palette') || baseCollectionName.includes('Semantic') || baseCollectionName.includes('Gradient')) {
+                    console.log(`Color collection variable "${variable.name}":`, {
+                        value: variable.value,
+                        type: variable.type,
+                        collection: variable.collection,
+                        mode: variable.mode
                     });
-                    if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-                        const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-                        if (rgbaMatch) {
-                            const r = parseInt(rgbaMatch[1]);
-                            const g = parseInt(rgbaMatch[2]);
-                            const b = parseInt(rgbaMatch[3]);
-                            const a = parseFloat(rgbaMatch[4]);
-                            if (a === 1) {
-                                tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                            }
-                            else {
-                                const alpha = Math.round(a * 255);
-                                tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+                }
+                if (variable.value !== null && variable.value !== undefined) {
+                    // Determine the token type based on variable type
+                    let tokenType = 'other';
+                    switch (variable.type) {
+                        case 'COLOR':
+                        case 'PAINT_STYLE':
+                            tokenType = 'color';
+                            break;
+                        case 'FLOAT':
+                        case 'DIMENSION':
+                            tokenType = 'number';
+                            break;
+                        case 'STRING':
+                            tokenType = 'string';
+                            break;
+                        case 'BOOLEAN':
+                            tokenType = 'boolean';
+                            break;
+                    }
+                    // Convert color values to proper hex format
+                    let tokenValue = variable.value;
+                    if (tokenType === 'color') {
+                        console.log(`Processing color variable "${variable.name}":`, {
+                            originalValue: variable.value,
+                            valueType: typeof variable.value
+                        });
+                        if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+                            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+                            if (rgbaMatch) {
+                                const r = parseInt(rgbaMatch[1]);
+                                const g = parseInt(rgbaMatch[2]);
+                                const b = parseInt(rgbaMatch[3]);
+                                const a = parseFloat(rgbaMatch[4]);
+                                if (a === 1) {
+                                    tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                                }
+                                else {
+                                    const alpha = Math.round(a * 255);
+                                    tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+                                }
                             }
                         }
+                        else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
+                            // Already a hex color, use as is
+                            tokenValue = variable.value;
+                        }
+                        else {
+                            console.log(`Unhandled color value type for "${variable.name}":`, variable.value);
+                        }
                     }
-                    else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
-                        // Already a hex color, use as is
-                        tokenValue = variable.value;
+                    // Create nested structure based on variable name path
+                    const nameParts = variable.name.split('/');
+                    let current = collectionTokens;
+                    for (let i = 0; i < nameParts.length - 1; i++) {
+                        const part = nameParts[i];
+                        if (!current[part]) {
+                            current[part] = {};
+                        }
+                        current = current[part];
                     }
-                    else {
-                        console.log(`Unhandled color value type for "${variable.name}":`, variable.value);
+                    const finalKey = nameParts[nameParts.length - 1];
+                    const token = {
+                        $value: tokenValue,
+                        $type: tokenType
+                    };
+                    if (variable.description) {
+                        token.$description = variable.description;
                     }
+                    current[finalKey] = token;
                 }
-                // Create nested structure based on variable name path
-                const nameParts = variable.name.split('/');
-                let current = collectionTokens;
-                for (let i = 0; i < nameParts.length - 1; i++) {
-                    const part = nameParts[i];
-                    if (!current[part]) {
-                        current[part] = {};
-                    }
-                    current = current[part];
-                }
-                const finalKey = nameParts[nameParts.length - 1];
-                const token = {
-                    $value: tokenValue,
-                    $type: tokenType
-                };
-                if (variable.description) {
-                    token.$description = variable.description;
-                }
-                current[finalKey] = token;
-            }
+            });
         });
         // Add the collection to tokenStudio if it has tokens
         if (Object.keys(collectionTokens).length > 0) {
-            tokenStudio[collectionName] = collectionTokens;
-            console.log(`Added collection "${collectionName}" with ${Object.keys(collectionTokens).length} tokens`);
+            tokenStudio[baseCollectionName] = collectionTokens;
+            console.log(`Added collection "${baseCollectionName}" with ${Object.keys(collectionTokens).length} tokens`);
         }
         else {
-            console.log(`Skipped collection "${collectionName}" - no valid tokens found`);
+            console.log(`Skipped collection "${baseCollectionName}" - no valid tokens found`);
         }
     });
     // Set metadata token set order based on what we actually created
