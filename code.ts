@@ -1677,6 +1677,18 @@ function transformToTokenStudio(tokens: any): any {
   });
 
   console.log('Grouped collections:', Object.keys(groupedCollections));
+  
+  // Debug: Check what's in each grouped collection
+  Object.entries(groupedCollections).forEach(([baseName, modes]: [string, any]) => {
+    console.log(`Base collection "${baseName}" has modes:`, Object.keys(modes));
+    Object.entries(modes).forEach(([modeName, variables]: [string, any]) => {
+      console.log(`Mode "${modeName}" has ${(variables as any[]).length} variables`);
+      // Check first few variables for debugging
+      (variables as any[]).slice(0, 3).forEach((v: any) => {
+        console.log(`  Variable "${v.name}": value="${v.value}", type="${v.type}"`);
+      });
+    });
+  });
 
   // Process each base collection
   Object.entries(groupedCollections).forEach(([baseCollectionName, modes]: [string, any]) => {

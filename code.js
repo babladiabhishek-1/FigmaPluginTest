@@ -1493,6 +1493,17 @@ function transformToTokenStudio(tokens) {
         }
     });
     console.log('Grouped collections:', Object.keys(groupedCollections));
+    // Debug: Check what's in each grouped collection
+    Object.entries(groupedCollections).forEach(([baseName, modes]) => {
+        console.log(`Base collection "${baseName}" has modes:`, Object.keys(modes));
+        Object.entries(modes).forEach(([modeName, variables]) => {
+            console.log(`Mode "${modeName}" has ${variables.length} variables`);
+            // Check first few variables for debugging
+            variables.slice(0, 3).forEach((v) => {
+                console.log(`  Variable "${v.name}": value="${v.value}", type="${v.type}"`);
+            });
+        });
+    });
     // Process each base collection
     Object.entries(groupedCollections).forEach(([baseCollectionName, modes]) => {
         console.log(`Processing base collection "${baseCollectionName}" with modes:`, Object.keys(modes));
