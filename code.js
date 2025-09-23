@@ -703,7 +703,11 @@ async function getAllVariables() {
         }
         // Convert nested structure to flat arrays for UI display
         const uiVariables = {};
+        console.log('Converting nested structure to flat arrays...');
+        console.log('categorizedVariables keys:', Object.keys(categorizedVariables));
+        console.log('categorizedVariables sample:', Object.entries(categorizedVariables).slice(0, 2));
         Object.entries(categorizedVariables).forEach(([collectionModeKey, nestedData]) => {
+            console.log(`Processing collection/mode: ${collectionModeKey}`);
             if (!uiVariables[collectionModeKey]) {
                 uiVariables[collectionModeKey] = [];
             }
@@ -722,6 +726,7 @@ async function getAllVariables() {
                             description: obj.$description || ''
                         };
                         uiVariables[collectionModeKey].push(variableData);
+                        console.log(`Added variable: ${variableData.name} = ${variableData.value}`);
                     }
                     else {
                         // This is a nested object, recurse
@@ -732,6 +737,7 @@ async function getAllVariables() {
                 }
             }
             flattenNested(nestedData);
+            console.log(`Collection ${collectionModeKey} has ${uiVariables[collectionModeKey].length} variables`);
         });
         // Log collection summary for debugging
         const collectionSummary = Object.entries(uiVariables).map(([key, vars]) => ({
