@@ -1469,14 +1469,28 @@ function transformToTokenStudio(tokens) {
             tokenSetOrder: []
         }
     };
-    // Group collections by base name (before the slash)
+    // Group collections by base name (before the slash) - fully generalized
     const groupedCollections = {};
     Object.entries(tokens).forEach(([collectionModeKey, variables]) => {
-        const [baseCollectionName, modeName] = collectionModeKey.split('/');
-        if (!groupedCollections[baseCollectionName]) {
-            groupedCollections[baseCollectionName] = {};
+        // Handle any nesting structure: "Collection/Mode", "UI/Palette/Value", "Collection", etc.
+        const parts = collectionModeKey.split('/');
+        if (parts.length === 1) {
+            // No slash - treat as single collection with default mode
+            const baseCollectionName = parts[0];
+            if (!groupedCollections[baseCollectionName]) {
+                groupedCollections[baseCollectionName] = {};
+            }
+            groupedCollections[baseCollectionName]['Default'] = variables;
         }
-        groupedCollections[baseCollectionName][modeName] = variables;
+        else {
+            // Has slash - first part is base collection, rest is mode path
+            const baseCollectionName = parts[0];
+            const modeName = parts.slice(1).join('/'); // Handle nested modes like "UI/Palette/Value"
+            if (!groupedCollections[baseCollectionName]) {
+                groupedCollections[baseCollectionName] = {};
+            }
+            groupedCollections[baseCollectionName][modeName] = variables;
+        }
     });
     console.log('Grouped collections:', Object.keys(groupedCollections));
     // Process each base collection
