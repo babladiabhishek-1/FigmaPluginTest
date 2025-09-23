@@ -23,8 +23,8 @@ function base64Encode(str) {
     return result;
 }
 // --- UTILITY FUNCTIONS ---
-// Helper to convert Figma's 0-1 RGBA values to a hex string (#RRGGBB) - legacy version
-function rgbaToHexLegacy(r, g, b, a) {
+// Helper to convert Figma's 0-1 RGBA values to a hex string (#RRGGBB)
+function rgbaToHex(r, g, b, a) {
     const toHex = (c) => ('0' + Math.round(c * 255).toString(16)).slice(-2);
     // Only include alpha if it's not fully opaque (1.0)
     if (a < 1) {
@@ -85,7 +85,7 @@ async function exportTokens() {
                         }
                         else {
                             const { r, g, b, a } = value;
-                            token.$value = rgbaToHexLegacy(r, g, b, a);
+                            token.$value = rgbaToHex(r, g, b, a);
                         }
                         break;
                     case 'FLOAT':
@@ -130,7 +130,7 @@ async function exportTokens() {
                 const { r, g, b } = paint.color;
                 const a = (_a = paint.opacity) !== null && _a !== void 0 ? _a : 1;
                 const token = {
-                    $value: rgbaToHexLegacy(r, g, b, a),
+                    $value: rgbaToHex(r, g, b, a),
                     $type: 'color'
                 };
                 if (style.description) {
@@ -499,8 +499,9 @@ function filterVariablesByCollections(categorizedVariables, selectedCollections)
     });
     return filtered;
 }
-const toHexNew = (n) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
-const rgbaToHex = ({ r, g, b, a }) => `#${toHexNew(r)}${toHexNew(g)}${toHexNew(b)}${a < 1 ? toHexNew(a) : ''}`;
+// Helper functions for robust alias resolution
+const toHexFromFloat = (n) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
+const rgbaToHexFromObject = ({ r, g, b, a }) => `#${toHexFromFloat(r)}${toHexFromFloat(g)}${toHexFromFloat(b)}${a < 1 ? toHexFromFloat(a) : ''}`;
 const typeMap = (t) => t === 'COLOR' ? 'color' : t === 'FLOAT' ? 'number' : t.toLowerCase();
 /** Resolve a variable's value for a given modeId, following aliases across collections. */
 function resolveForMode(varId, modeId, variablesById, idToPath, seen = new Set()) {
@@ -531,7 +532,7 @@ function resolveForMode(varId, modeId, variablesById, idToPath, seen = new Set()
         return { finalType: res.finalType, finalValue: res.finalValue, chain: [v.name, ...res.chain] };
     }
     if (raw.type === 'COLOR') {
-        const hex = rgbaToHex(raw.value);
+        const hex = rgbaToHexFromObject(raw.value);
         d('RESOLVE/color', { name: v.name, hex });
         return { finalType: 'color', finalValue: hex, chain: [v.name] };
     }
@@ -1427,39 +1428,7 @@ async function pushToGitHub(repoUrl, token, branch, path, content, filename) {
     }
 }
 // Extract colors from variables for the color palette
-function extractColors(variables) {
-    const colors = {};
-    Object.entries(variables).forEach(([collectionName, variables]) => {
-        // Look for Paint Styles collection that contains Umain colors
-        if (collectionName === 'Paint Styles') {
-            colors['Umain-colors/Value'] = {};
-            variables.forEach((variable) => {
-                // Check if this is a Umain color paint style
-                if (variable.type === 'PAINT_STYLE' && variable.name && variable.name.startsWith('Umain - colors/')) {
-                    const nameParts = variable.name.split('/');
-                    if (nameParts.length >= 3) {
-                        const colorFamily = nameParts[1]; // e.g., "Greyscale"
-                        const colorShade = nameParts[2]; // e.g., "900"
-                        if (!colors['Umain-colors/Value'][colorFamily]) {
-                            colors['Umain-colors/Value'][colorFamily] = {};
-                        }
-                        // Use the actual color value extracted from the paint style
-                        colors['Umain-colors/Value'][colorFamily][colorShade] = {
-                            value: variable.value || 'No value',
-                            type: 'color',
-                            description: variable.description || ''
-                        };
-                    }
-                }
-            });
-        }
-    });
-    return colors;
-}
-// Generate color palette export
-function generateColorPalette(colors) {
-    return JSON.stringify(colors, null, 2);
-}
+// Removed unused color extraction functions - now handled by robust alias resolution
 // Transform to Token Studio format
 function transformToTokenStudio(tokens) {
     console.log('transformToTokenStudio called with tokens:', Object.keys(tokens));
@@ -1710,41 +1679,7 @@ figma.ui.onmessage = async (msg) => {
             figma.notify('Error exporting Tailwind CSS. See plugin console for details.', { error: true });
             console.error(error);
         }
-    }
-    else if (msg.type === 'get-colors') {
-        try {
-            const allVariables = await getAllVariables();
-            const selectedCollections = msg.selectedCollections || [];
-            const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
-            const colors = extractColors(filteredVariables);
-            figma.ui.postMessage({ type: 'colors-loaded', colors });
-        }
-        catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            figma.ui.postMessage({ type: 'export-error', message: errorMessage });
-            figma.notify('Error loading colors. See plugin console for details.', { error: true });
-            console.error(error);
-        }
-    }
-    else if (msg.type === 'export-colors') {
-        try {
-            const allVariables = await getAllVariables();
-            const selectedCollections = msg.selectedCollections || [];
-            const filteredVariables = filterVariablesByCollections(allVariables, selectedCollections);
-            const colors = extractColors(filteredVariables);
-            const colorPalette = generateColorPalette(colors);
-            figma.ui.postMessage({
-                type: 'export-colors-complete',
-                output: colorPalette,
-                filename: 'color-palette.json'
-            });
-        }
-        catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            figma.ui.postMessage({ type: 'export-error', message: errorMessage });
-            figma.notify('Error exporting color palette. See plugin console for details.', { error: true });
-            console.error(error);
-        }
+        // Removed old color export functions - now handled by robust alias resolution
     }
     else if (msg.type === 'export-token-studio') {
         try {
