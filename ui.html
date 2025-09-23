@@ -1226,10 +1226,11 @@
       
       // Check if we received an array instead of categorized object
       if (Array.isArray(categorizedVariables)) {
-        console.log('Received array instead of categorized object, creating fallback structure');
-        // Create a fallback structure with all variables in "All Variables" category
+        console.log('Received array instead of categorized object, processing as single collection');
+        // Process array as a single collection with dynamic name
+        const collectionName = 'Variables';
         categorizedVariables = {
-          'All Variables': categorizedVariables
+          [collectionName]: categorizedVariables
         };
       }
       

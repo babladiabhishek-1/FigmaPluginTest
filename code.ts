@@ -174,134 +174,51 @@ async function exportTokens() {
 
 // --- STYLE DICTIONARY FORMAT TRANSFORMATION ---
 
-// Transform tokens to Style Dictionary format
+// --- START: generic flattener for any collection/mode tree ---
 function transformToStyleDictionary(tokens: any): any {
-  const sdTokens: any = {};
+  // tokens: { "<Collection>/<Mode>": { nested paths -> { $value, $type, $description? } } }
 
-  Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
-    // Create a hierarchical structure based on collection and variable patterns
-    if (collectionName === 'Umain-colors') {
-      // Special handling for color collections
-      sdTokens[`${collectionName}/Value`] = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        // Parse color names like "Fuchsia/300" or "Greyscale/800_15"
-        const nameParts = variable.name.split('/');
-        if (nameParts.length >= 2) {
-          const colorFamily = nameParts[0];
-          const colorShade = nameParts[1];
-          
-          if (!sdTokens[`${collectionName}/Value`][colorFamily]) {
-            sdTokens[`${collectionName}/Value`][colorFamily] = {};
-          }
-          
-          // Convert RGBA to hex if it's a color
-          let tokenValue = variable.value;
-          if (variable.type === 'COLOR' && typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-            // Convert rgba to hex
-            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-            if (rgbaMatch) {
-              const r = parseInt(rgbaMatch[1]);
-              const g = parseInt(rgbaMatch[2]);
-              const b = parseInt(rgbaMatch[3]);
-              const a = parseFloat(rgbaMatch[4]);
-              
-              if (a === 1) {
-                tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-              } else {
-                tokenValue = variable.value; // Keep as rgba
-              }
-            }
-          }
-          
-          sdTokens[`${collectionName}/Value`][colorFamily][colorShade] = {
-            value: tokenValue,
-            type: 'color',
-            description: variable.description || ''
-          };
-        }
-      });
-    } else if (collectionName === 'Umain - semantic Colors') {
-      // Handle semantic colors with Light/Dark modes
-      (variables as any[]).forEach((variable: any) => {
-        // Parse semantic color names like "interactive/secondaryPressed"
-        const nameParts = variable.name.split('/');
-        if (nameParts.length >= 2) {
-          const category = nameParts[0];
-          const subcategory = nameParts[1];
-          
-          // Check if this is a Light or Dark mode variable
-          const mode = variable.modes && variable.modes.includes('Light') ? 'Light' : 'Dark';
-          const key = `${collectionName}/${mode}`;
-          
-          if (!sdTokens[key]) {
-            sdTokens[key] = {};
-          }
-          if (!sdTokens[key][category]) {
-            sdTokens[key][category] = {};
-          }
-          
-          // Convert RGBA to hex if it's a color
-          let tokenValue = variable.value;
-          if (variable.type === 'COLOR' && typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-            if (rgbaMatch) {
-              const r = parseInt(rgbaMatch[1]);
-              const g = parseInt(rgbaMatch[2]);
-              const b = parseInt(rgbaMatch[3]);
-              const a = parseFloat(rgbaMatch[4]);
-              
-              if (a === 1) {
-                tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-              }
-            }
-          }
-          
-          sdTokens[key][category][subcategory] = {
-            value: tokenValue,
-            type: 'color',
-            description: variable.description || ''
-          };
-        }
-      });
-    } else {
-      // Default handling for other collections
-      sdTokens[collectionName] = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        // Map Figma types to Style Dictionary types
-        let sdType = 'other';
-        switch (variable.type) {
-          case 'COLOR':
-            sdType = 'color';
-            break;
-          case 'FLOAT':
-            sdType = 'dimension';
-            break;
-          case 'STRING':
-            sdType = 'string';
-            break;
-          case 'BOOLEAN':
-            sdType = 'boolean';
-            break;
-          default:
-            sdType = 'other';
-        }
+  const out: any = {};
 
-        // Use the actual value from the variable
-        const tokenValue = variable.value !== null ? variable.value : '';
+  const toKebab = (s: string) =>
+    s
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .replace(/[\s_./]+/g, '-')
+      .replace(/-+/g, '-')
+      .toLowerCase();
 
-        sdTokens[collectionName][variable.name] = {
-          value: tokenValue,
-          type: sdType,
-          description: variable.description || ''
-        };
-      });
+  function walk(node: any, pathArr: string[], bucketKey: string) {
+    if (!node || typeof node !== 'object') return;
+
+    // leaf token?
+    if (Object.prototype.hasOwnProperty.call(node, '$value') &&
+        Object.prototype.hasOwnProperty.call(node, '$type')) {
+      const tokenName = toKebab(pathArr.join('-'));
+      if (!out[bucketKey]) out[bucketKey] = {};
+      out[bucketKey][tokenName] = {
+        value: node.$value,
+        // SD prefers "dimension" for numeric tokens
+        type: node.$type === 'number' ? 'dimension' : node.$type,
+        ...(node.$description ? { description: node.$description } : {})
+      };
+      return;
     }
-  });
 
-  return sdTokens;
+    // recurse
+    for (const [k, v] of Object.entries(node)) {
+      walk(v, [...pathArr, k], bucketKey);
+    }
+  }
+
+  for (const [collectionModeKey, tree] of Object.entries(tokens)) {
+    // "Semantic Colors/Light" -> "semantic-colors-light"
+    const category = toKebab(collectionModeKey);
+    walk(tree, [], category);
+  }
+
+  return out;
 }
+// --- END: generic flattener ---
 
 // CSS Custom Properties generator
 function generateCSSOutput(tokens: any): string {
@@ -317,7 +234,6 @@ function generateCSSOutput(tokens: any): string {
   output += '}\n';
   return output;
 }
-
 // SCSS Variables generator
 function generateSCSSOutput(tokens: any): string {
   let output = '';
