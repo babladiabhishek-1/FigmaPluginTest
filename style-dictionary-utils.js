@@ -124,31 +124,14 @@ function parseColor(colorValue) {
   return { r: 0, g: 0, b: 0, a: 1, hex: 'FF000000' };
 }
 
-// Optional: Enforce a display/build order
-const ORDER = [
-  'Palette/Value',
-  'Semantic Colors/Light',
-  'Semantic Colors/Dark',
-  'Gradient stops/Light',
-  'Gradient stops/Dark',
-  'legacyMopColors/LegacyColorCode',
-  'legacyMopColors/NearestColor New UIPalette',
-  'Corner Radius/Mode 1',
-  'Spatial System/Mode 1',
-  'Device & Orientation/portrait',
-  'Device & Orientation/landscape',
-  'Device & Orientation/tabletPortrait',
-  'Device & Orientation/tabletLandscape',
-  'Dynamic Text Size/Original',
-  'Dynamic Text Size/Max scaled',
-  'Image Size/Mode 1',
-  'Icon Size/Mode 1'
-];
-
+// Dynamic ordering function - sorts collections alphabetically
 function orderTopLevel(obj) {
   const out = {};
-  for (const k of ORDER) if (obj[k]) out[k] = obj[k];
-  for (const k of Object.keys(obj)) if (!out[k]) out[k] = obj[k];
+  // Sort keys alphabetically for consistent ordering
+  const sortedKeys = Object.keys(obj).sort();
+  for (const k of sortedKeys) {
+    out[k] = obj[k];
+  }
   return out;
 }
 
@@ -157,7 +140,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     transformToStyleDictionary,
     parseColor,
-    orderTopLevel,
-    ORDER
+    orderTopLevel
   };
 }
