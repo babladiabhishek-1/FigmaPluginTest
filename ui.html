@@ -1407,20 +1407,20 @@
           // Create mode list for this collection
           const modeList = Object.entries(modes).map(([modeName, variables]) => `
             <div class="mode-section">
-              <div class="mode-header" data-mode="${baseCollectionName}/${modeName}">
-                <span class="mode-name">${modeName}</span>
+              <div class="mode-header" data-mode="${(baseCollectionName || '').replace(/"/g, '&quot;')}/${(modeName || '').replace(/"/g, '&quot;')}">
+                <span class="mode-name">${(modeName || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}</span>
                 <span class="mode-count">${variables.length}</span>
                 <span class="mode-toggle">▶</span>
               </div>
               <div class="mode-tokens">
                 ${variables.length > 0 ? variables.map(variable => `
-                  <div class="token-item" data-id="${variable.id}">
-                    <div class="token-name">${variable.name}</div>
-                    <div class="token-value">${variable.value || 'No value'}</div>
+                  <div class="token-item" data-id="${variable.id || ''}">
+                    <div class="token-name">${(variable.name || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}</div>
+                    <div class="token-value">${(variable.value || 'No value').toString().replace(/"/g, '&quot;').replace(/'/g, '&#39;')}</div>
                     <div class="token-meta">
-                      <span class="token-type">${variable.type}</span>
+                      <span class="token-type">${(variable.type || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}</span>
                     </div>
-                    ${variable.description ? `<div class="token-description">${variable.description}</div>` : ''}
+                    ${variable.description ? `<div class="token-description">${(variable.description || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}</div>` : ''}
                   </div>
                 `).join('') : '<div class="empty-mode">No variables found in this mode</div>'}
               </div>
@@ -1632,7 +1632,12 @@
           vars = categorizeVariables(vars);
           console.log('Categorized variables:', vars);
         }
-        renderVariables(vars);
+        try {
+          renderVariables(vars);
+        } catch (error) {
+          console.error('Error rendering variables:', error);
+          variablesList.innerHTML = '<div class="loading">Error loading collections. Please try again.</div>';
+        }
       } else if (message.type === 'export-error') {
         output.value = `Error: ${message.message}`;
         copyBtn.disabled = true;

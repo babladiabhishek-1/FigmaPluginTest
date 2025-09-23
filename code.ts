@@ -1,5 +1,40 @@
 // This file holds the main code for the plugin. It has access to the Figma API.
 
+// ==== DEBUG UTIL ====
+const DEBUG = true;
+const tag = (t:string)=>`[%c${t}%c]`;
+const S = ['color:#9ae6b4;font-weight:700','color:inherit'];
+
+function d(t:string,...args:any[]) { if (DEBUG) console.log(tag(t), ...S, ...args); }
+function w(t:string,...args:any[]) { if (DEBUG) console.warn(tag(`WARN:${t}`), ...S, ...args); }
+function e(t:string,...args:any[]) { if (DEBUG) console.error(tag(`ERR:${t}`), ...S, ...args); }
+
+// ==== TYPES ====
+type ColorRGBA = { r:number; g:number; b:number; a:number };
+type ModeValue =
+  | { type:'COLOR'; value:ColorRGBA }
+  | { type:'FLOAT'; value:number }
+  | { type:'STRING'; value:string }
+  | { type:'BOOLEAN'; value:boolean }
+  | { type:'VARIABLE_ALIAS'; id:string };
+
+// ==== UTILITIES ====
+const toHex = (n:number)=>Math.round(n*255).toString(16).padStart(2,'0').toLowerCase();
+const rgbaToHex = ({r,g,b,a}:ColorRGBA)=>`#${toHex(r)}${toHex(g)}${toHex(b)}${a<1?toHex(a):''}`;
+
+const typeMap = (t:'COLOR'|'FLOAT'|'STRING'|'BOOLEAN') =>
+  t==='COLOR'?'color':t==='FLOAT'?'number':t.toLowerCase();
+
+function setDeep(obj:any, path:string[], value:any) {
+  let cur = obj;
+  for (let i=0; i<path.length-1; i++) {
+    const k = path[i];
+    if (!cur[k] || typeof cur[k] !== 'object' || Array.isArray(cur[k])) cur[k] = {};
+    cur = cur[k];
+  }
+  cur[path[path.length-1]] = value;
+}
+
 // Show the plugin UI with larger size
 figma.showUI(__html__, { width: 1000, height: 600 });
 
@@ -31,15 +66,6 @@ function base64Encode(str: string): string {
 
 // --- UTILITY FUNCTIONS ---
 
-// Helper to convert Figma's 0-1 RGBA values to a hex string (#RRGGBB)
-function rgbaToHex(r: number, g: number, b: number, a: number): string {
-  const toHex = (c: number) => ('0' + Math.round(c * 255).toString(16)).slice(-2);
-  // Only include alpha if it's not fully opaque (1.0)
-  if (a < 1) {
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}${toHex(a)}`;
-  }
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
 
 // Helper to set a value in a nested object based on a path array
 function setNestedObjectValue(obj: any, path: string[], value: any): void {
@@ -101,8 +127,8 @@ async function exportTokens() {
             if (typeof value === 'object' && 'type' in value && value.type === 'VARIABLE_ALIAS') {
               token.$value = `{${variableMap.get(value.id)}}`;
             } else {
-              const { r, g, b, a } = value as RGBA;
-              token.$value = rgbaToHex(r, g, b, a);
+              const { r, g, b, a } = value as ColorRGBA;
+              token.$value = rgbaToHex({ r, g, b, a });
             }
             break;
             
@@ -153,7 +179,7 @@ async function exportTokens() {
         const { r, g, b } = paint.color;
         const a = paint.opacity ?? 1;
         const token: any = {
-          $value: rgbaToHex(r, g, b, a),
+          $value: rgbaToHex({ r, g, b, a }),
           $type: 'color'
         };
         if (style.description) {
@@ -573,132 +599,54 @@ function filterVariablesByCollections(categorizedVariables: any, selectedCollect
 }
 
 // Robust alias chain resolution system
-type ModeValue =
-  | { type: 'COLOR'; value: { r: number; g: number; b: number; a: number } }
-  | { type: 'FLOAT'; value: number }
-  | { type: 'STRING'; value: string }
-  | { type: 'BOOLEAN'; value: boolean }
-  | { type: 'VARIABLE_ALIAS'; id: string };
-
-// Helper functions for robust alias resolution
-const toHexFromFloat = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
-const rgbaToHexFromObject = ({ r, g, b, a }: { r: number; g: number; b: number; a: number }) => 
-  `#${toHexFromFloat(r)}${toHexFromFloat(g)}${toHexFromFloat(b)}${a < 1 ? toHexFromFloat(a) : ''}`;
-
-const typeMap = (t: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN') =>
-  t === 'COLOR' ? 'color' : t === 'FLOAT' ? 'number' : t.toLowerCase();
 
 /** Resolve a variable's value for a given modeId, following aliases across collections. */
-function resolveForMode(varId: string, modeId: string, variablesById: Map<string, any>, idToPath: Map<string, string[]>, seen: Set<string> = new Set()):
-  { finalType: 'color' | 'number' | 'string' | 'boolean', finalValue: string | number | boolean, chain: string[] } | null {
+function resolveForMode(
+  varId:string,
+  modeId:string,
+  variablesById:Map<string,any>,
+  idToPath:Map<string,string[]>,
+  seen:Set<string> = new Set()
+): { finalType:'color'|'number'|'string'|'boolean', finalValue:string|number|boolean, chain:string[] } | null {
 
-  if (seen.has(varId)) { w('AliasCycle', { varId, chain: [...seen] }); return null; }
+  if (seen.has(varId)) { w('AliasCycle', { varId, chain:[...seen] }); return null; }
   seen.add(varId);
 
   const v = variablesById.get(varId);
   if (!v) { w('MissingVar', { varId }); return null; }
 
-  const raw = v.valuesByMode?.[modeId];
-  if (!raw) { w('NoValueInMode', { name: v.name, modeId }); return null; }
+  let raw = v.valuesByMode?.[modeId] as ModeValue | undefined;
 
-  // log variable entry
-  d('RESOLVE/start', { name: v.name, modeId, raw });
-
-  // Handle raw numeric values (common in Figma variables)
-  if (typeof raw === 'number') {
-    d('RESOLVE/number', { name: v.name, value: raw });
-    return { finalType: 'number', finalValue: raw, chain: [v.name] };
+  // Fallback if no value in this mode
+  if (!raw) {
+    w('NoValueInMode', { name: v.name, modeId });
+    return null;
   }
 
-  // Handle raw string values
-  if (typeof raw === 'string') {
-    d('RESOLVE/string', { name: v.name, value: raw });
-    return { finalType: 'string', finalValue: raw, chain: [v.name] };
+  d('RESOLVE/start', { name:v.name, modeId, raw });
+
+  if (raw.type === 'VARIABLE_ALIAS') {
+    const path = idToPath.get(raw.id);
+    d('RESOLVE/alias', { from:v.name, toId:raw.id, toPath:path?.join('.') ?? '(unknown)' });
+    const res = resolveForMode(raw.id, modeId, variablesById, idToPath, seen);
+    if (!res) return null;
+    return { finalType:res.finalType, finalValue: res.finalValue, chain:[v.name, ...res.chain] };
   }
 
-  // Handle raw boolean values
-  if (typeof raw === 'boolean') {
-    d('RESOLVE/boolean', { name: v.name, value: raw });
-    return { finalType: 'boolean', finalValue: raw, chain: [v.name] };
+  if (raw.type === 'COLOR') {
+    const hex = rgbaToHex(raw.value);
+    d('RESOLVE/color', { name:v.name, hex });
+    return { finalType:'color', finalValue:hex, chain:[v.name] };
   }
+  if (raw.type === 'FLOAT')   return { finalType:'number',  finalValue:raw.value, chain:[v.name] };
+  if (raw.type === 'STRING')  return { finalType:'string',  finalValue:raw.value, chain:[v.name] };
+  if (raw.type === 'BOOLEAN') return { finalType:'boolean', finalValue:raw.value, chain:[v.name] };
 
-  // Handle object values with type property
-  if (typeof raw === 'object' && raw !== null) {
-    if ('type' in raw && raw.type === 'VARIABLE_ALIAS') {
-      const path = idToPath.get(raw.id);
-      d('RESOLVE/alias', { from: v.name, toId: raw.id, toPath: path?.join('.') ?? '(unknown)' });
-      const res = resolveForMode(raw.id, modeId, variablesById, idToPath, seen);
-      if (!res) return null;
-      return { finalType: res.finalType, finalValue: res.finalValue, chain: [v.name, ...res.chain] };
-    }
-
-    if ('type' in raw && raw.type === 'COLOR' && 'value' in raw) {
-      const hex = rgbaToHexFromObject(raw.value);
-      d('RESOLVE/color', { name: v.name, hex });
-      return { finalType: 'color', finalValue: hex, chain: [v.name] };
-    }
-
-    if ('type' in raw && raw.type === 'FLOAT' && 'value' in raw) {
-      d('RESOLVE/float', { name: v.name, value: raw.value });
-      return { finalType: 'number', finalValue: raw.value, chain: [v.name] };
-    }
-
-    if ('type' in raw && raw.type === 'STRING' && 'value' in raw) {
-      d('RESOLVE/string_obj', { name: v.name, value: raw.value });
-      return { finalType: 'string', finalValue: raw.value, chain: [v.name] };
-    }
-
-    if ('type' in raw && raw.type === 'BOOLEAN' && 'value' in raw) {
-      d('RESOLVE/boolean_obj', { name: v.name, value: raw.value });
-      return { finalType: 'boolean', finalValue: raw.value, chain: [v.name] };
-    }
-
-    // Handle color objects with r, g, b, a properties directly
-    if ('r' in raw && 'g' in raw && 'b' in raw) {
-      const hex = rgbaToHexFromObject(raw);
-      d('RESOLVE/color_direct', { name: v.name, hex });
-      return { finalType: 'color', finalValue: hex, chain: [v.name] };
-    }
-
-    // Handle Figma color objects that might have different structure
-    if (raw && typeof raw === 'object') {
-      // Check if it's a Figma color object with r, g, b properties (0-1 range)
-      const hasColorProps = 'r' in raw && 'g' in raw && 'b' in raw;
-      const hasAlpha = 'a' in raw || 'alpha' in raw;
-      
-      if (hasColorProps) {
-        const r = raw.r;
-        const g = raw.g;
-        const b = raw.b;
-        const a = raw.a || raw.alpha || 1;
-        
-        // Convert from 0-1 range to 0-255 range
-        const hex = rgbaToHexFromObject({ r, g, b, a });
-        d('RESOLVE/color_figma', { name: v.name, r, g, b, a, hex });
-        return { finalType: 'color', finalValue: hex, chain: [v.name] };
-      }
-    }
-  }
-
-  // Enhanced debugging for unknown types
-  w('UnknownRawType', { 
-    name: v.name, 
-    raw, 
-    rawType: typeof raw,
-    rawKeys: typeof raw === 'object' && raw !== null ? Object.keys(raw) : 'not an object',
-    rawStringified: JSON.stringify(raw, null, 2)
-  });
+  w('UnknownRawType', { name:v.name, raw });
   return null;
 }
 
-// Debug utility functions
-const DEBUG = true;
-const tag = (t: string) => `[%c${t}%c]`;
-const S = ['color: #9ae6b4; font-weight:700', 'color: inherit'];
 
-function d(t: string, ...args: any[]) { if (DEBUG) console.log(tag(t), ...S, ...args); }
-function w(t: string, ...args: any[]) { if (DEBUG) console.warn(tag(`WARN:${t}`), ...S, ...args); }
-function e(t: string, ...args: any[]) { if (DEBUG) console.error(tag(`ERR:${t}`), ...S, ...args); }
 
 // Get all available variables for the side pane with categorization
 async function getAllVariables() {
@@ -737,9 +685,9 @@ async function getAllVariables() {
           modeName: m.name,
           count,
           selected: count > 0 // default select when useful
-        };
-      });
-
+    };
+  });
+  
       d('PANEL/collection', { name: c.name, modes: modes.map(x => `${x.modeName}:${x.count}`) });
 
       return {
@@ -749,7 +697,7 @@ async function getAllVariables() {
       };
     });
 
-    // Build categorized variables for UI display (flat structure with arrays)
+    // Build categorized variables for export (nested structure)
     const categorizedVariables: any = {};
 
     console.log('Processing collections:', variableCollections.map(c => c.name));
@@ -787,58 +735,19 @@ async function getAllVariables() {
           
           const res = resolveForMode(v.id, mode.modeId, variablesById, idToPath);
           if (!res) { 
-            // Try to find any available value for this variable across all modes
-            let fallbackValue = null;
-            let fallbackType = 'unknown';
-            
-            for (const otherMode of coll.modes) {
-              const fallbackRes = resolveForMode(v.id, otherMode.modeId, variablesById, idToPath);
-              if (fallbackRes) {
-                fallbackValue = fallbackRes.finalValue;
-                fallbackType = fallbackRes.finalType;
-                d('FALLBACK', { name: v.name, setKey, fallbackMode: otherMode.name, value: fallbackValue });
-                break;
-              }
-            }
-            
-            if (!fallbackValue) {
-              w('EmitSkip', { name: v.name, setKey, reason: 'resolveForMode=null and no fallback' }); 
-              skippedCount++;
-              continue; 
-            }
-            
-            // Use fallback value
-            const variableData = {
-              id: v.id,
-              name: v.name,
-              type: fallbackType,
-              value: fallbackValue,
-              collection: coll.name,
-              mode: mode.name,
-              description: v.description || '',
-              isFallback: true
-            };
-            
-            categorizedVariables[setKey].push(variableData);
-            resolvedCount++;
-            d('EMIT_FALLBACK', { setKey, path: v.name, type: fallbackType, value: fallbackValue });
-            continue;
+            w('EmitSkip', { name: v.name, setKey, reason: 'resolveForMode=null' }); 
+            skippedCount++;
+            continue; 
           }
           
-          // Create variable data for UI display
-          const variableData = {
-            id: v.id,
-            name: v.name,
-            type: res.finalType,
-            value: res.finalValue,
-            collection: coll.name,
-            mode: mode.name,
-            description: v.description || ''
-          };
+          const path = v.name.split('/').map(s => s.trim()).filter(Boolean);
+          const entry: any = { $value: res.finalValue, $type: res.finalType };
+          if (v.description?.trim()) entry.$description = v.description.trim();
           
-          categorizedVariables[setKey].push(variableData);
+          setDeep(categorizedVariables, [`${coll.name}/${mode.name}`, ...path], entry);
+          
+          d('EMIT', { setKey, path: path.join(' / '), type: res.finalType, value: res.finalValue, chain: res.chain });
           resolvedCount++;
-          d('EMIT', { setKey, path: v.name, type: res.finalType, value: res.finalValue, chain: res.chain });
         }
         
         d('MODE_RESULT', { setKey, resolved: resolvedCount, skipped: skippedCount, total: varsInColl.length });
@@ -893,32 +802,57 @@ async function getAllVariables() {
       categorizedVariables['Paint Styles'].push(styleData);
     }
 
+    // Convert nested structure to flat arrays for UI display
+    const uiVariables: any = {};
+    
+    Object.entries(categorizedVariables).forEach(([collectionModeKey, nestedData]) => {
+      if (!uiVariables[collectionModeKey]) {
+        uiVariables[collectionModeKey] = [];
+      }
+      
+      // Flatten nested structure into array of variables
+      function flattenNested(obj: any, path: string[] = []): void {
+        if (obj && typeof obj === 'object') {
+          if (obj.$value !== undefined) {
+            // This is a leaf node with a value
+            const variableData = {
+              id: `${collectionModeKey}/${path.join('/')}`,
+              name: path.join('/'),
+              type: obj.$type,
+              value: obj.$value,
+              collection: collectionModeKey.split('/')[0],
+              mode: collectionModeKey.split('/').slice(1).join('/'),
+              description: obj.$description || ''
+            };
+            uiVariables[collectionModeKey].push(variableData);
+          } else {
+            // This is a nested object, recurse
+            Object.entries(obj).forEach(([key, value]) => {
+              flattenNested(value, [...path, key]);
+            });
+          }
+        }
+      }
+      
+      flattenNested(nestedData);
+    });
+    
     // Log collection summary for debugging
-    const collectionSummary = Object.entries(categorizedVariables).map(([key, vars]) => ({
+    const collectionSummary = Object.entries(uiVariables).map(([key, vars]) => ({
       collection: key,
       count: Array.isArray(vars) ? vars.length : 0
     }));
     
     console.log('Collection Summary:', collectionSummary);
-    console.log('Returning categorized variables:', Object.keys(categorizedVariables));
-    return categorizedVariables;
-
+    console.log('Returning categorized variables:', Object.keys(uiVariables));
+    return uiVariables;
+    
   } catch (error) {
     console.error('Error getting variables:', error);
     return {};
   }
 }
 
-// Safer setDeep function
-function setDeep(obj: any, path: string[], value: any) {
-  let cur = obj;
-  for (let i = 0; i < path.length - 1; i++) {
-    const k = path[i];
-    if (!cur[k] || typeof cur[k] !== 'object' || Array.isArray(cur[k])) cur[k] = {};
-    cur = cur[k];
-  }
-  cur[path[path.length - 1]] = value;
-}
 
 // Helper function to categorize variables based on type and name patterns
 // Note: This function is no longer used as we now group by collection names
@@ -2073,7 +2007,10 @@ figma.ui.onmessage = async (msg) => {
       console.log('Getting variables...');
       const variables = await getAllVariables();
       console.log('Variables retrieved, sending to UI:', variables);
-      figma.ui.postMessage({ type: 'variables-loaded', variables });
+      
+      // Sanitize the data before sending to prevent template literal issues
+      const sanitizedVariables = JSON.parse(JSON.stringify(variables));
+      figma.ui.postMessage({ type: 'variables-loaded', variables: sanitizedVariables });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       console.error('Error getting variables:', error);
