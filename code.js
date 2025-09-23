@@ -523,26 +523,79 @@ function resolveForMode(varId, modeId, variablesById, idToPath, seen = new Set()
     }
     // log variable entry
     d('RESOLVE/start', { name: v.name, modeId, raw });
-    if (raw.type === 'VARIABLE_ALIAS') {
-        const path = idToPath.get(raw.id);
-        d('RESOLVE/alias', { from: v.name, toId: raw.id, toPath: (_b = path === null || path === void 0 ? void 0 : path.join('.')) !== null && _b !== void 0 ? _b : '(unknown)' });
-        const res = resolveForMode(raw.id, modeId, variablesById, idToPath, seen);
-        if (!res)
-            return null;
-        return { finalType: res.finalType, finalValue: res.finalValue, chain: [v.name, ...res.chain] };
+    // Handle raw numeric values (common in Figma variables)
+    if (typeof raw === 'number') {
+        d('RESOLVE/number', { name: v.name, value: raw });
+        return { finalType: 'number', finalValue: raw, chain: [v.name] };
     }
-    if (raw.type === 'COLOR') {
-        const hex = rgbaToHexFromObject(raw.value);
-        d('RESOLVE/color', { name: v.name, hex });
-        return { finalType: 'color', finalValue: hex, chain: [v.name] };
+    // Handle raw string values
+    if (typeof raw === 'string') {
+        d('RESOLVE/string', { name: v.name, value: raw });
+        return { finalType: 'string', finalValue: raw, chain: [v.name] };
     }
-    if (raw.type === 'FLOAT')
-        return { finalType: 'number', finalValue: raw.value, chain: [v.name] };
-    if (raw.type === 'STRING')
-        return { finalType: 'string', finalValue: raw.value, chain: [v.name] };
-    if (raw.type === 'BOOLEAN')
-        return { finalType: 'boolean', finalValue: raw.value, chain: [v.name] };
-    w('UnknownRawType', { name: v.name, raw });
+    // Handle raw boolean values
+    if (typeof raw === 'boolean') {
+        d('RESOLVE/boolean', { name: v.name, value: raw });
+        return { finalType: 'boolean', finalValue: raw, chain: [v.name] };
+    }
+    // Handle object values with type property
+    if (typeof raw === 'object' && raw !== null) {
+        if ('type' in raw && raw.type === 'VARIABLE_ALIAS') {
+            const path = idToPath.get(raw.id);
+            d('RESOLVE/alias', { from: v.name, toId: raw.id, toPath: (_b = path === null || path === void 0 ? void 0 : path.join('.')) !== null && _b !== void 0 ? _b : '(unknown)' });
+            const res = resolveForMode(raw.id, modeId, variablesById, idToPath, seen);
+            if (!res)
+                return null;
+            return { finalType: res.finalType, finalValue: res.finalValue, chain: [v.name, ...res.chain] };
+        }
+        if ('type' in raw && raw.type === 'COLOR' && 'value' in raw) {
+            const hex = rgbaToHexFromObject(raw.value);
+            d('RESOLVE/color', { name: v.name, hex });
+            return { finalType: 'color', finalValue: hex, chain: [v.name] };
+        }
+        if ('type' in raw && raw.type === 'FLOAT' && 'value' in raw) {
+            d('RESOLVE/float', { name: v.name, value: raw.value });
+            return { finalType: 'number', finalValue: raw.value, chain: [v.name] };
+        }
+        if ('type' in raw && raw.type === 'STRING' && 'value' in raw) {
+            d('RESOLVE/string_obj', { name: v.name, value: raw.value });
+            return { finalType: 'string', finalValue: raw.value, chain: [v.name] };
+        }
+        if ('type' in raw && raw.type === 'BOOLEAN' && 'value' in raw) {
+            d('RESOLVE/boolean_obj', { name: v.name, value: raw.value });
+            return { finalType: 'boolean', finalValue: raw.value, chain: [v.name] };
+        }
+        // Handle color objects with r, g, b, a properties directly
+        if ('r' in raw && 'g' in raw && 'b' in raw) {
+            const hex = rgbaToHexFromObject(raw);
+            d('RESOLVE/color_direct', { name: v.name, hex });
+            return { finalType: 'color', finalValue: hex, chain: [v.name] };
+        }
+        // Handle Figma color objects that might have different structure
+        if (raw && typeof raw === 'object') {
+            // Check if it's a Figma color object with r, g, b properties (0-1 range)
+            const hasColorProps = 'r' in raw && 'g' in raw && 'b' in raw;
+            const hasAlpha = 'a' in raw || 'alpha' in raw;
+            if (hasColorProps) {
+                const r = raw.r;
+                const g = raw.g;
+                const b = raw.b;
+                const a = raw.a || raw.alpha || 1;
+                // Convert from 0-1 range to 0-255 range
+                const hex = rgbaToHexFromObject({ r, g, b, a });
+                d('RESOLVE/color_figma', { name: v.name, r, g, b, a, hex });
+                return { finalType: 'color', finalValue: hex, chain: [v.name] };
+            }
+        }
+    }
+    // Enhanced debugging for unknown types
+    w('UnknownRawType', {
+        name: v.name,
+        raw,
+        rawType: typeof raw,
+        rawKeys: typeof raw === 'object' && raw !== null ? Object.keys(raw) : 'not an object',
+        rawStringified: JSON.stringify(raw, null, 2)
+    });
     return null;
 }
 // Debug utility functions
