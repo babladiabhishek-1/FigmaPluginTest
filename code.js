@@ -559,10 +559,15 @@ async function getAllVariables() {
             }
             // Keep all line-height values in their respective collections
             // Each collection serves different purposes and should maintain its own line-height values
+            console.log(`Variable ${variable.name} details:`, {
+                resolvedType: variable.resolvedType,
+                actualValue: actualValue,
+                collection: collection === null || collection === void 0 ? void 0 : collection.name
+            });
             const variableData = {
                 id: variable.id,
                 name: variable.name,
-                type: variable.resolvedType,
+                type: variable.resolvedType || 'VARIABLE',
                 value: actualValue,
                 collection: (collection === null || collection === void 0 ? void 0 : collection.name) || 'Unknown',
                 modes: modes.map(m => m.name),
