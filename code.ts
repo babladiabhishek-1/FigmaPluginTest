@@ -31,8 +31,8 @@ function base64Encode(str: string): string {
 
 // --- UTILITY FUNCTIONS ---
 
-// Helper to convert Figma's 0-1 RGBA values to a hex string (#RRGGBB)
-function rgbaToHex(r: number, g: number, b: number, a: number): string {
+// Helper to convert Figma's 0-1 RGBA values to a hex string (#RRGGBB) - legacy version
+function rgbaToHexLegacy(r: number, g: number, b: number, a: number): string {
   const toHex = (c: number) => ('0' + Math.round(c * 255).toString(16)).slice(-2);
   // Only include alpha if it's not fully opaque (1.0)
   if (a < 1) {
@@ -102,7 +102,7 @@ async function exportTokens() {
               token.$value = `{${variableMap.get(value.id)}}`;
             } else {
               const { r, g, b, a } = value as RGBA;
-              token.$value = rgbaToHex(r, g, b, a);
+              token.$value = rgbaToHexLegacy(r, g, b, a);
             }
             break;
             
@@ -153,7 +153,7 @@ async function exportTokens() {
         const { r, g, b } = paint.color;
         const a = paint.opacity ?? 1;
         const token: any = {
-          $value: rgbaToHex(r, g, b, a),
+          $value: rgbaToHexLegacy(r, g, b, a),
           $type: 'color'
         };
         if (style.description) {
@@ -312,7 +312,7 @@ function generateiOSOutput(tokens: any): string {
         if (token.type === 'color') {
           const color = parseColor(token.value);
           output += `  static let ${tokenName} = UIColor(red: ${color.r}, green: ${color.g}, blue: ${color.b}, alpha: ${color.a})\n`;
-        } else {
+          } else {
           output += `  static let ${tokenName} = "${token.value}"\n`;
         }
       } catch (error) {
@@ -572,142 +572,146 @@ function filterVariablesByCollections(categorizedVariables: any, selectedCollect
   return filtered;
 }
 
-// Helper function to recursively resolve variable aliases
-function resolveVariableAlias(variableId: string, modeId: string, variablesById: Map<string, any>, depth: number = 0): any {
-  // Prevent infinite recursion
-  if (depth > 10) {
-    console.warn(`Max recursion depth reached for variable ${variableId}`);
-    return null;
+// Robust alias chain resolution system
+type ModeValue =
+  | { type: 'COLOR'; value: { r: number; g: number; b: number; a: number } }
+  | { type: 'FLOAT'; value: number }
+  | { type: 'STRING'; value: string }
+  | { type: 'BOOLEAN'; value: boolean }
+  | { type: 'VARIABLE_ALIAS'; id: string };
+
+const toHex = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
+const rgbaToHex = ({ r, g, b, a }: { r: number; g: number; b: number; a: number }) => `#${toHex(r)}${toHex(g)}${toHex(b)}${a < 1 ? toHex(a) : ''}`;
+
+const typeMap = (t: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN') =>
+  t === 'COLOR' ? 'color' : t === 'FLOAT' ? 'number' : t.toLowerCase();
+
+/** Resolve a variable's value for a given modeId, following aliases across collections. */
+function resolveForMode(varId: string, modeId: string, variablesById: Map<string, any>, idToPath: Map<string, string[]>, seen: Set<string> = new Set()):
+  { finalType: 'color' | 'number' | 'string' | 'boolean', finalValue: string | number | boolean, chain: string[] } | null {
+
+  if (seen.has(varId)) { w('AliasCycle', { varId, chain: [...seen] }); return null; }
+  seen.add(varId);
+
+  const v = variablesById.get(varId);
+  if (!v) { w('MissingVar', { varId }); return null; }
+
+  const raw = v.valuesByMode?.[modeId] as ModeValue | undefined;
+  if (!raw) { w('NoValueInMode', { name: v.name, modeId }); return null; }
+
+  // log variable entry
+  d('RESOLVE/start', { name: v.name, modeId, raw });
+
+  if (raw.type === 'VARIABLE_ALIAS') {
+    const path = idToPath.get(raw.id);
+    d('RESOLVE/alias', { from: v.name, toId: raw.id, toPath: path?.join('.') ?? '(unknown)' });
+    const res = resolveForMode(raw.id, modeId, variablesById, idToPath, seen);
+    if (!res) return null;
+    return { finalType: res.finalType, finalValue: res.finalValue, chain: [v.name, ...res.chain] };
   }
-  
-  const variable = variablesById.get(variableId);
-  if (!variable) {
-    console.warn(`Variable ${variableId} not found`);
-    return null;
+
+  if (raw.type === 'COLOR') {
+    const hex = rgbaToHex(raw.value);
+    d('RESOLVE/color', { name: v.name, hex });
+    return { finalType: 'color', finalValue: hex, chain: [v.name] };
   }
-  
-  const value = variable.valuesByMode[modeId];
-  if (!value) {
-    console.warn(`No value found for variable ${variableId} in mode ${modeId}`);
-    return null;
-  }
-  
-  console.log(`🔗 Resolving alias for variable ${variable.name} (depth ${depth}):`, {
-    variableId,
-    modeId,
-    value,
-    valueType: typeof value,
-    isAlias: typeof value === 'object' && value !== null && 'type' in value && value.type === 'VARIABLE_ALIAS'
-  });
-  
-  // If it's another alias, resolve it recursively
-  if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'VARIABLE_ALIAS') {
-    console.log(`🔄 Following alias chain: ${variable.name} -> ${value.id}`);
-    return resolveVariableAlias(value.id, modeId, variablesById, depth + 1);
-  }
-  
-  // If it's a color object, convert it
-  if (typeof value === 'object' && value !== null && 'r' in value && 'g' in value && 'b' in value) {
-    const r = Math.round(value.r * 255);
-    const g = Math.round(value.g * 255);
-    const b = Math.round(value.b * 255);
-    const a = 'a' in value ? value.a : 1;
-    const result = `rgba(${r}, ${g}, ${b}, ${a})`;
-    console.log(`🎨 Converted color for ${variable.name}:`, result);
-    return result;
-  }
-  
-  // Return the resolved value
-  console.log(`✅ Resolved value for ${variable.name}:`, value);
-  return value;
+  if (raw.type === 'FLOAT') return { finalType: 'number', finalValue: raw.value, chain: [v.name] };
+  if (raw.type === 'STRING') return { finalType: 'string', finalValue: raw.value, chain: [v.name] };
+  if (raw.type === 'BOOLEAN') return { finalType: 'boolean', finalValue: raw.value, chain: [v.name] };
+
+  w('UnknownRawType', { name: v.name, raw });
+  return null;
 }
+
+// Debug utility functions
+const DEBUG = true;
+const tag = (t: string) => `[%c${t}%c]`;
+const S = ['color: #9ae6b4; font-weight:700', 'color: inherit'];
+
+function d(t: string, ...args: any[]) { if (DEBUG) console.log(tag(t), ...S, ...args); }
+function w(t: string, ...args: any[]) { if (DEBUG) console.warn(tag(`WARN:${t}`), ...S, ...args); }
+function e(t: string, ...args: any[]) { if (DEBUG) console.error(tag(`ERR:${t}`), ...S, ...args); }
 
 // Get all available variables for the side pane with categorization
 async function getAllVariables() {
-  const categorizedVariables: any = {};
-  
-  // Fallback: if no variables are found in categories, we'll add an "All Variables" category
-  let allVariables: any[] = [];
-  
   try {
-    // Get Figma variables
-    const localVariables = await figma.variables.getLocalVariablesAsync();
-    const collections = await figma.variables.getLocalVariableCollectionsAsync();
-    
-    console.log('Found collections:', collections.map(c => c.name));
-    console.log('Found variables:', localVariables.length);
-    console.log('Collection details:', collections.map(c => ({ name: c.name, variableCount: c.variableIds.length })));
-    
-    // Build a map of variables by ID for alias resolution
-    const variablesById = new Map(localVariables.map(v => [v.id, v]));
-    
-    for (const collection of collections) {
-      for (const mode of collection.modes) {
-        const setKey = `${collection.name}/${mode.name}`;
+    // Get Figma variables and collections
+    const variables = await figma.variables.getLocalVariablesAsync();
+    const variableCollections = await figma.variables.getLocalVariableCollectionsAsync();
+
+    // Index by id once
+    const variablesById = new Map(variables.map(v => [v.id, v]));
+
+    // Build name path cache once
+    const idToPath = new Map<string, string[]>();
+    for (const v of variables) idToPath.set(v.id, v.name.split('/').map(s => s.trim()).filter(Boolean));
+
+    // Quick verification prints
+    d('INTAKE/collections', variableCollections.map(c => ({ 
+      name: c.name, 
+      modes: c.modes.map(m => ({ id: m.modeId, name: m.name })) 
+    })));
+    d('INTAKE/sample', variables.slice(0, 5).map(v => ({ 
+      name: v.name, 
+      coll: v.variableCollectionId, 
+      modes: Object.keys(v.valuesByMode || {}) 
+    })));
+
+    // Build panel items for UI
+    const panelItems = variableCollections.map((c) => {
+      const vars = variables.filter(v => v.variableCollectionId === c.id);
+
+      const modes = c.modes.map(m => {
+        // count only variables that have a value for THIS modeId
+        const count = vars.reduce((n, v) => n + (v.valuesByMode?.[m.modeId] ? 1 : 0), 0);
+        return {
+          modeId: m.modeId,
+          modeName: m.name,
+          count,
+          selected: count > 0 // default select when useful
+        };
+      });
+
+      d('PANEL/collection', { name: c.name, modes: modes.map(x => `${x.modeName}:${x.count}`) });
+
+      return {
+        collectionId: c.id,
+        collectionName: c.name,
+        modes
+      };
+    });
+
+    // Build categorized variables for export
+    const categorizedVariables: any = {};
+
+    // Export loop: emit collection/mode → nested path and log every decision
+    for (const coll of variableCollections) {
+      const varsInColl = variables.filter(v => v.variableCollectionId === coll.id);
+      
+      for (const mode of coll.modes) {
+        const setKey = `${coll.name}/${mode.name}`;
         
-        for (const variableId of collection.variableIds) {
-          const variable = variablesById.get(variableId);
-          if (!variable) continue;
-          
-          const value = variable.valuesByMode[mode.modeId];
-          let actualValue = null;
-        
-          if (value !== undefined) {
-            // Handle different value types
-            if (typeof value === 'object' && value !== null) {
-              if ('type' in value && value.type === 'VARIABLE_ALIAS') {
-                // This is a reference to another variable - resolve it recursively
-                actualValue = resolveVariableAlias(value.id, mode.modeId, variablesById);
-              } else if ('r' in value && 'g' in value && 'b' in value) {
-                // This is a color object with r, g, b, a values
-                const r = Math.round(value.r * 255);
-                const g = Math.round(value.g * 255);
-                const b = Math.round(value.b * 255);
-                const a = 'a' in value ? value.a : 1;
-                actualValue = `rgba(${r}, ${g}, ${b}, ${a})`;
-              } else {
-                actualValue = value;
-              }
-            } else {
-              actualValue = value;
-            }
+        for (const v of varsInColl) {
+          const res = resolveForMode(v.id, mode.modeId, variablesById, idToPath);
+          if (!res) { 
+            w('EmitSkip', { name: v.name, setKey, reason: 'resolveForMode=null' }); 
+            continue; 
           }
           
-          console.log(`Variable ${variable.name} details:`, {
-            resolvedType: variable.resolvedType,
-            actualValue: actualValue,
-            collection: collection.name,
-            mode: mode.name
-          });
+          const path = v.name.split('/').map(s => s.trim()).filter(Boolean);
+          const entry: any = { $value: res.finalValue, $type: res.finalType };
+          if (v.description?.trim()) entry.$description = v.description.trim();
           
-          const variableData = {
-            id: variable.id,
-            name: variable.name,
-            type: variable.resolvedType || 'VARIABLE',
-            value: actualValue,
-            collection: collection.name,
-            mode: mode.name,
-            description: variable.description || ''
-          };
-          
-          // Add to all variables list
-          allVariables.push(variableData);
-          
-          // Use the setKey (collection/mode) for categorization
-          console.log(`Variable ${variable.name} assigned to collection: ${setKey} (collection found: true)`);
-          
-          if (!categorizedVariables[setKey]) {
-            categorizedVariables[setKey] = [];
-          }
-          categorizedVariables[setKey].push(variableData);
+          // Use setDeep to create nested structure
+          setDeep(categorizedVariables, [setKey, ...path], entry);
+          d('EMIT', { setKey, path: path.join('/'), type: res.finalType, value: res.finalValue, chain: res.chain });
         }
       }
     }
-    
-    // Get paint styles
+
+    // Get paint styles and add them
     const paintStyles = await figma.getLocalPaintStylesAsync();
     for (const style of paintStyles) {
-      // Extract color value from paint style
       let colorValue = 'No value';
       if (style.paints && style.paints.length > 0) {
         const paint = style.paints[0];
@@ -717,8 +721,7 @@ async function getAllVariables() {
           const red = Math.round(r * 255);
           const green = Math.round(g * 255);
           const blue = Math.round(b * 255);
-          const alpha = Math.round(a * 255);
-          
+
           if (a === 1) {
             colorValue = `#${red.toString(16).padStart(2, '0')}${green.toString(16).padStart(2, '0')}${blue.toString(16).padStart(2, '0')}`;
           } else {
@@ -726,60 +729,41 @@ async function getAllVariables() {
           }
         }
       }
-      
+
       const styleData = {
         id: style.id,
         name: style.name,
         type: 'PAINT_STYLE',
         value: colorValue,
         collection: 'Paint Styles',
-        modes: ['Default'],
+        mode: 'Default',
         description: style.description || ''
       };
-      
-      // Add to all variables list
-      allVariables.push(styleData);
-      
-      // Group paint styles by collection
-      const collectionName = 'Paint Styles';
-      if (!categorizedVariables[collectionName]) {
-        categorizedVariables[collectionName] = [];
+
+      if (!categorizedVariables['Paint Styles']) {
+        categorizedVariables['Paint Styles'] = [];
       }
-      categorizedVariables[collectionName].push(styleData);
+      categorizedVariables['Paint Styles'].push(styleData);
     }
-    
-    // Text styles are not processed separately to avoid duplication with variables
-    // Variables already contain font size and line-height values
-    
+
+    console.log('Returning categorized variables:', Object.keys(categorizedVariables));
+    return categorizedVariables;
+
   } catch (error) {
     console.error('Error getting variables:', error);
+    return {};
   }
-  
-  // Debug logging
-  console.log('Categorized variables:', categorizedVariables);
-  const totalVariables = Object.values(categorizedVariables).reduce((sum: number, vars) => sum + (vars as any[]).length, 0);
-  console.log(`Total variables found: ${totalVariables}`);
-  console.log('All variables:', allVariables);
-  console.log('Collection names found:', Object.keys(categorizedVariables));
-  console.log('Total variables in allVariables array:', allVariables.length);
-  
-  // If no variables were categorized, show them all in an "All Variables" category
-  if (totalVariables === 0 && allVariables.length > 0) {
-    console.log('No variables categorized, showing all in "All Variables" category');
-    console.log('This means categorizedVariables is empty but allVariables has items');
-    return {
-      'All Variables': allVariables
-    };
+}
+
+// Safer setDeep function
+function setDeep(obj: any, path: string[], value: any) {
+  let cur = obj;
+  for (let i = 0; i < path.length - 1; i++) {
+    const k = path[i];
+    if (!cur[k] || typeof cur[k] !== 'object' || Array.isArray(cur[k])) cur[k] = {};
+    cur = cur[k];
   }
-  
-  // Sort categories alphabetically for better organization
-  const sortedCategories: any = {};
-  Object.keys(categorizedVariables).sort().forEach(key => {
-    sortedCategories[key] = categorizedVariables[key];
-  });
-  
-  console.log('Returning categorized variables:', sortedCategories);
-  return sortedCategories;
+  cur[path[path.length - 1]] = value;
 }
 
 // Helper function to categorize variables based on type and name patterns
