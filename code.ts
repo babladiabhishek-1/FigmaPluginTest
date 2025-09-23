@@ -1658,20 +1658,32 @@ function transformToTokenStudio(tokens: any): any {
         
         // Convert color values to proper hex format
         let tokenValue = variable.value;
-        if (tokenType === 'color' && typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-          const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-          if (rgbaMatch) {
-            const r = parseInt(rgbaMatch[1]);
-            const g = parseInt(rgbaMatch[2]);
-            const b = parseInt(rgbaMatch[3]);
-            const a = parseFloat(rgbaMatch[4]);
-            
-            if (a === 1) {
-              tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-            } else {
-              const alpha = Math.round(a * 255);
-              tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+        if (tokenType === 'color') {
+          console.log(`Processing color variable "${variable.name}":`, {
+            originalValue: variable.value,
+            valueType: typeof variable.value
+          });
+          
+          if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+            if (rgbaMatch) {
+              const r = parseInt(rgbaMatch[1]);
+              const g = parseInt(rgbaMatch[2]);
+              const b = parseInt(rgbaMatch[3]);
+              const a = parseFloat(rgbaMatch[4]);
+              
+              if (a === 1) {
+                tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+              } else {
+                const alpha = Math.round(a * 255);
+                tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
+              }
             }
+          } else if (typeof variable.value === 'string' && variable.value.startsWith('#')) {
+            // Already a hex color, use as is
+            tokenValue = variable.value;
+          } else {
+            console.log(`Unhandled color value type for "${variable.name}":`, variable.value);
           }
         }
         
