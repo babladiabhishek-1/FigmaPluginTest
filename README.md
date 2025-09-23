@@ -9,6 +9,7 @@ A Figma plugin that exports design tokens from your Figma variables and styles i
 - **Token Format**: Outputs tokens in a standardized format with `$type`, `$value`, and `$description` properties
 - **Mode Support**: Handles different variable modes (e.g., Light/Dark themes)
 - **Alias Resolution**: Properly handles variable aliases and references
+- **Generalized Collection Nesting**: Automatically groups collections by base name, handling any nesting structure
 
 ## Setup & Installation
 
@@ -71,6 +72,31 @@ The plugin exports tokens in this format:
   }
 }
 ```
+
+## Collection Nesting Logic
+
+The plugin automatically groups collections by their base name, handling any nesting structure from Figma:
+
+### Supported Collection Formats
+
+- **No slash** (e.g., `"Spatial System"`)
+  - → Creates `"Spatial System"` with `"Default"` mode
+
+- **Single slash** (e.g., `"Palette/Value"`)
+  - → Creates `"Palette"` with `"Value"` mode
+
+- **Multiple slashes** (e.g., `"UI/Palette/Value"`)
+  - → Creates `"UI"` with `"Palette/Value"` mode
+
+- **Any depth** (e.g., `"Design/System/Colors/Primary/Light"`)
+  - → Creates `"Design"` with `"System/Colors/Primary/Light"` mode
+
+### Benefits
+
+- **Future-proof**: Works with any design system structure
+- **Flexible**: Handles simple and complex collection hierarchies
+- **Robust**: Gracefully handles edge cases
+- **Maintainable**: No need to update code for new collection structures
 
 ## Supported Token Types
 
