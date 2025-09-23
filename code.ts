@@ -572,6 +572,44 @@ function filterVariablesByCollections(categorizedVariables: any, selectedCollect
   return filtered;
 }
 
+// Helper function to recursively resolve variable aliases
+function resolveVariableAlias(variableId: string, modeId: string, variablesById: Map<string, any>, depth: number = 0): any {
+  // Prevent infinite recursion
+  if (depth > 10) {
+    console.warn(`Max recursion depth reached for variable ${variableId}`);
+    return null;
+  }
+  
+  const variable = variablesById.get(variableId);
+  if (!variable) {
+    console.warn(`Variable ${variableId} not found`);
+    return null;
+  }
+  
+  const value = variable.valuesByMode[modeId];
+  if (!value) {
+    console.warn(`No value found for variable ${variableId} in mode ${modeId}`);
+    return null;
+  }
+  
+  // If it's another alias, resolve it recursively
+  if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'VARIABLE_ALIAS') {
+    return resolveVariableAlias(value.id, modeId, variablesById, depth + 1);
+  }
+  
+  // If it's a color object, convert it
+  if (typeof value === 'object' && value !== null && 'r' in value && 'g' in value && 'b' in value) {
+    const r = Math.round(value.r * 255);
+    const g = Math.round(value.g * 255);
+    const b = Math.round(value.b * 255);
+    const a = 'a' in value ? value.a : 1;
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  }
+  
+  // Return the resolved value
+  return value;
+}
+
 // Get all available variables for the side pane with categorization
 async function getAllVariables() {
   const categorizedVariables: any = {};
@@ -606,14 +644,8 @@ async function getAllVariables() {
             // Handle different value types
             if (typeof value === 'object' && value !== null) {
               if ('type' in value && value.type === 'VARIABLE_ALIAS') {
-                // This is a reference to another variable
-                const referencedVariable = variablesById.get(value.id);
-                if (referencedVariable) {
-                  const referencedValue = referencedVariable.valuesByMode[mode.modeId];
-                  actualValue = referencedValue;
-                } else {
-                  actualValue = value;
-                }
+                // This is a reference to another variable - resolve it recursively
+                actualValue = resolveVariableAlias(value.id, mode.modeId, variablesById);
               } else if ('r' in value && 'g' in value && 'b' in value) {
                 // This is a color object with r, g, b, a values
                 const r = Math.round(value.r * 255);
