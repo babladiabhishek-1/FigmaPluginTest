@@ -110,6 +110,34 @@
       transition: max-height 0.3s ease;
       margin-top: 4px;
     }
+    
+    .modes-list {
+      padding: 4px 0;
+    }
+    
+    .mode-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 16px;
+      font-size: 11px;
+      color: #666;
+      border-left: 2px solid #f0f0f0;
+      margin-left: 8px;
+    }
+    
+    .mode-name {
+      font-weight: 500;
+    }
+    
+    .mode-count {
+      background: #f0f0f0;
+      color: #666;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 500;
+    }
 
     .category-items.expanded {
       max-height: 500px;
@@ -1250,30 +1278,63 @@
       let hasVariables = false;
       let html = '';
 
-      // Sort collections alphabetically and render each category
-      const sortedCollections = Object.keys(categorizedVariables).sort();
-      sortedCollections.forEach(categoryName => {
-        const variables = categorizedVariables[categoryName];
-        if (variables.length > 0) {
+      // Group collections by base name (before the slash) for proper nesting
+      const groupedCollections = {};
+      
+      Object.entries(categorizedVariables).forEach(([collectionModeKey, variables]) => {
+        const parts = collectionModeKey.split('/');
+        
+        if (parts.length === 1) {
+          // No slash - treat as single collection with default mode
+          const baseCollectionName = parts[0];
+          if (!groupedCollections[baseCollectionName]) {
+            groupedCollections[baseCollectionName] = {};
+          }
+          groupedCollections[baseCollectionName]['Default'] = variables;
+        } else {
+          // Has slash - first part is base collection, rest is mode path
+          const baseCollectionName = parts[0];
+          const modeName = parts.slice(1).join('/');
+          
+          if (!groupedCollections[baseCollectionName]) {
+            groupedCollections[baseCollectionName] = {};
+          }
+          
+          groupedCollections[baseCollectionName][modeName] = variables;
+        }
+      });
+
+      console.log('Grouped collections for UI:', Object.keys(groupedCollections));
+
+      // Sort collections alphabetically and render each base collection
+      const sortedCollections = Object.keys(groupedCollections).sort();
+      sortedCollections.forEach(baseCollectionName => {
+        const modes = groupedCollections[baseCollectionName];
+        const totalVariables = Object.values(modes).reduce((sum, modeVars) => sum + modeVars.length, 0);
+        
+        if (totalVariables > 0) {
           hasVariables = true;
+          
+          // Create mode list for this collection
+          const modeList = Object.entries(modes).map(([modeName, variables]) => `
+            <div class="mode-item">
+              <span class="mode-name">${modeName}</span>
+              <span class="mode-count">${variables.length}</span>
+            </div>
+          `).join('');
+          
           html += `
             <div class="category">
-              <div class="category-header" data-category="${categoryName}">
-                <input type="checkbox" class="category-checkbox" id="checkbox-${categoryName.replace(/[^a-zA-Z0-9-_]/g, '-')}" checked>
-                <span class="category-name">${categoryName}</span>
-                <span class="category-count">${variables.length}</span>
+              <div class="category-header" data-category="${baseCollectionName}">
+                <input type="checkbox" class="category-checkbox" id="checkbox-${baseCollectionName.replace(/[^a-zA-Z0-9-_]/g, '-')}" checked>
+                <span class="category-name">${baseCollectionName}</span>
+                <span class="category-count">${totalVariables}</span>
                 <span class="category-toggle">▶</span>
               </div>
               <div class="category-items">
-                ${variables.map(variable => `
-                  <div class="variable-item" data-id="${variable.id}">
-                    <div class="variable-name">${variable.name}</div>
-                    <div class="variable-meta">
-                      <span class="variable-type">${variable.type}</span>
-                    </div>
-                    ${variable.description ? `<div class="variable-description">${variable.description}</div>` : ''}
-                  </div>
-                `).join('')}
+                <div class="modes-list">
+                  ${modeList}
+                </div>
               </div>
             </div>
           `;
@@ -1362,15 +1423,29 @@
     // Function to update selection status
     function updateSelectionStatus() {
       const selectedCount = selectedCollections.size;
-      const totalCount = Object.keys(originalCategorizedVariables || {}).length;
-      const statusText = `${selectedCount} of ${totalCount} collections selected`;
       
+      // Count unique base collections from the grouped structure
+      let totalCount = 0;
+      if (originalCategorizedVariables) {
+        const groupedCollections = {};
+        Object.entries(originalCategorizedVariables).forEach(([collectionModeKey, variables]) => {
+          const parts = collectionModeKey.split('/');
+          const baseCollectionName = parts[0];
+          if (!groupedCollections[baseCollectionName]) {
+            groupedCollections[baseCollectionName] = true;
+            totalCount++;
+          }
+        });
+      }
+      
+      const statusText = `${selectedCount} of ${totalCount} collections selected`;
+
       // Update collection count display
       const collectionCountElement = document.getElementById('collection-count');
       if (collectionCountElement) {
         collectionCountElement.textContent = `(${totalCount})`;
       }
-      
+
       // Update status in console for now
       console.log(statusText);
     }
