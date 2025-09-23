@@ -1694,405 +1694,78 @@ function transformToTokenStudio(tokens: any): any {
   };
 
   // Process each collection directly from Figma
+  console.log('Available collections for Token Studio:', Object.keys(tokens));
   Object.entries(tokens).forEach(([collectionName, variables]: [string, any]) => {
     console.log(`Processing collection: ${collectionName} with ${(variables as any[]).length} variables`);
+    console.log(`First few variables in ${collectionName}:`, (variables as any[]).slice(0, 3));
     
-    // Handle different collection types based on their names
-    if (collectionName === 'Paint Styles') {
-      // Extract primitive colors from Paint Styles
-      const paletteValue: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'PAINT_STYLE' && variable.value && variable.name) {
-          const nameParts = variable.name.split('/');
-          if (nameParts.length >= 2) {
-            const category = nameParts[0]; // e.g., "Umain - colors"
-            const colorFamily = nameParts[1]; // e.g., "Greyscale"
-            const colorShade = nameParts[2] || 'default'; // e.g., "900"
+    // Dynamically process any collection based on its content
+    const collectionTokens: any = {};
+    
+    (variables as any[]).forEach((variable: any) => {
+      if (variable.value !== null && variable.value !== undefined) {
+        // Determine the token type based on variable type
+        let tokenType = 'other';
+        switch (variable.type) {
+          case 'COLOR':
+          case 'PAINT_STYLE':
+            tokenType = 'color';
+            break;
+          case 'FLOAT':
+          case 'DIMENSION':
+            tokenType = 'number';
+            break;
+          case 'STRING':
+            tokenType = 'string';
+            break;
+          case 'BOOLEAN':
+            tokenType = 'boolean';
+            break;
+        }
+        
+        // Convert color values to proper hex format
+        let tokenValue = variable.value;
+        if (tokenType === 'color' && typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
+          const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+          if (rgbaMatch) {
+            const r = parseInt(rgbaMatch[1]);
+            const g = parseInt(rgbaMatch[2]);
+            const b = parseInt(rgbaMatch[3]);
+            const a = parseFloat(rgbaMatch[4]);
             
-            if (category === 'Umain - colors') {
-              if (!paletteValue[colorFamily]) {
-                paletteValue[colorFamily] = {};
-              }
-              
-              // Convert to proper hex format
-              let colorValue = variable.value;
-              if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-                const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-                if (rgbaMatch) {
-                  const r = parseInt(rgbaMatch[1]);
-                  const g = parseInt(rgbaMatch[2]);
-                  const b = parseInt(rgbaMatch[3]);
-                  const a = parseFloat(rgbaMatch[4]);
-                  
-                  if (a === 1) {
-                    colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                  } else {
-                    const alpha = Math.round(a * 255);
-                    colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
-                  }
-                }
-              }
-              
-              paletteValue[colorFamily][colorShade] = {
-                $value: colorValue,
-                $type: 'color'
-              };
+            if (a === 1) {
+              tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+            } else {
+              const alpha = Math.round(a * 255);
+              tokenValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
             }
           }
         }
-      });
-      
-      if (Object.keys(paletteValue).length > 0) {
-        tokenStudio['Palette/Value'] = paletteValue;
-      }
-    } else if (collectionName.includes('semantic') || collectionName.includes('Semantic')) {
-      // Handle semantic colors with Light/Dark modes
-      const lightMode: any = {};
-      const darkMode: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'COLOR' && variable.value) {
-          const nameParts = variable.name.split('/');
-          if (nameParts.length >= 2) {
-            const category = nameParts[0]; // e.g., "bg", "fg", "stroke"
-            const subcategory = nameParts[1]; // e.g., "primary", "secondary"
-            
-            // Check if this is Light or Dark mode
-            const isLight = variable.modes && variable.modes.some((mode: string) => 
-              mode.toLowerCase().includes('light') || mode.toLowerCase().includes('original')
-            );
-            const isDark = variable.modes && variable.modes.some((mode: string) => 
-              mode.toLowerCase().includes('dark')
-            );
-            
-            // Convert to proper hex format
-            let colorValue = variable.value;
-            if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-              const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-              if (rgbaMatch) {
-                const r = parseInt(rgbaMatch[1]);
-                const g = parseInt(rgbaMatch[2]);
-                const b = parseInt(rgbaMatch[3]);
-                const a = parseFloat(rgbaMatch[4]);
-                
-                if (a === 1) {
-                  colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                } else {
-                  const alpha = Math.round(a * 255);
-                  colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
-                }
-              }
-            }
-            
-            if (isLight) {
-              if (!lightMode[category]) {
-                lightMode[category] = {};
-              }
-              lightMode[category][subcategory] = {
-                $value: colorValue,
-                $type: 'color',
-                $description: variable.description || ''
-              };
-            }
-            
-            if (isDark) {
-              if (!darkMode[category]) {
-                darkMode[category] = {};
-              }
-              darkMode[category][subcategory] = {
-                $value: colorValue,
-                $type: 'color',
-                $description: variable.description || ''
-              };
-            }
+        
+        // Create nested structure based on variable name path
+        const nameParts = variable.name.split('/');
+        let current = collectionTokens;
+        
+        for (let i = 0; i < nameParts.length - 1; i++) {
+          const part = nameParts[i];
+          if (!current[part]) {
+            current[part] = {};
           }
+          current = current[part];
         }
-      });
-      
-      if (Object.keys(lightMode).length > 0) {
-        tokenStudio['Semantic Colors/Light'] = lightMode;
+        
+        const finalKey = nameParts[nameParts.length - 1];
+        current[finalKey] = {
+          $value: tokenValue,
+          $type: tokenType,
+          ...(variable.description ? { $description: variable.description } : {})
+        };
       }
-      if (Object.keys(darkMode).length > 0) {
-        tokenStudio['Semantic Colors/Dark'] = darkMode;
-      }
-    } else if (collectionName.includes('Corner Radius') || collectionName.includes('corner')) {
-      // Handle corner radius
-      const cornerRadius: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'FLOAT' || variable.type === 'DIMENSION') {
-          cornerRadius[variable.name] = {
-            $value: variable.value,
-            $type: 'number'
-          };
-        }
-      });
-      
-      if (Object.keys(cornerRadius).length > 0) {
-        tokenStudio['Corner Radius/Mode 1'] = cornerRadius;
-      }
-    } else if (collectionName.includes('Spatial') || collectionName.includes('spatial')) {
-      // Handle spatial system
-      const spatial: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'FLOAT' || variable.type === 'DIMENSION') {
-          spatial[variable.name] = {
-            $value: variable.value,
-            $type: 'number',
-            $description: variable.description || ''
-          };
-        }
-      });
-      
-      if (Object.keys(spatial).length > 0) {
-        tokenStudio['Spatial System/Mode 1'] = spatial;
-      }
-    } else if (collectionName.includes('Device') || collectionName.includes('Orientation')) {
-      // Handle device and orientation specific values
-      const portrait: any = {};
-      const landscape: any = {};
-      const tabletPortrait: any = {};
-      const tabletLandscape: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'FLOAT' || variable.type === 'DIMENSION') {
-          const baseValue = variable.value;
-          
-          // Only add if we have a valid value
-          if (baseValue !== null && baseValue !== undefined) {
-            // Portrait values (default)
-            portrait[variable.name] = {
-              $value: baseValue,
-              $type: 'number',
-              $description: variable.description || ''
-            };
-            
-            // Landscape values (adjusted)
-            let landscapeValue = baseValue;
-            if (variable.name.toLowerCase().includes('width') && typeof baseValue === 'number') {
-              landscapeValue = Math.round(baseValue * 0.6);
-            } else if (variable.name.toLowerCase().includes('height') && typeof baseValue === 'number') {
-              landscapeValue = Math.round(baseValue * 1.2);
-            }
-            
-            landscape[variable.name] = {
-              $value: landscapeValue,
-              $type: 'number',
-              $description: variable.description || ''
-            };
-            
-            // Tablet values (adjusted)
-            let tabletPortraitValue = baseValue;
-            let tabletLandscapeValue = baseValue;
-            if (typeof baseValue === 'number') {
-              tabletPortraitValue = Math.round(baseValue * 1.1);
-              tabletLandscapeValue = Math.round(baseValue * 0.8);
-            }
-            
-            tabletPortrait[variable.name] = {
-              $value: tabletPortraitValue,
-              $type: 'number',
-              $description: variable.description || ''
-            };
-            
-            tabletLandscape[variable.name] = {
-              $value: tabletLandscapeValue,
-              $type: 'number',
-              $description: variable.description || ''
-            };
-          }
-        }
-      });
-      
-      if (Object.keys(portrait).length > 0) {
-        tokenStudio['Device & Orientation/portrait'] = portrait;
-      }
-      if (Object.keys(landscape).length > 0) {
-        tokenStudio['Device & Orientation/landscape'] = landscape;
-      }
-      if (Object.keys(tabletPortrait).length > 0) {
-        tokenStudio['Device & Orientation/tabletPortrait'] = tabletPortrait;
-      }
-      if (Object.keys(tabletLandscape).length > 0) {
-        tokenStudio['Device & Orientation/tabletLandscape'] = tabletLandscape;
-      }
-    } else if (collectionName.includes('Dynamic Text') || collectionName.includes('Text Size')) {
-      // Handle dynamic text sizes
-      const original: any = {};
-      const maxScaled: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'FLOAT' || variable.type === 'DIMENSION') {
-          const baseValue = variable.value;
-          
-          // Original values
-          original[variable.name] = {
-            $value: baseValue,
-            $type: 'number'
-          };
-          
-          // Max scaled values (typically 1.25x for accessibility)
-          const scaledValue = typeof baseValue === 'number' ? Math.round(baseValue * 1.25) : baseValue;
-          maxScaled[variable.name] = {
-            $value: scaledValue,
-            $type: 'number'
-          };
-        }
-      });
-      
-      if (Object.keys(original).length > 0) {
-        tokenStudio['Dynamic Text Size/Original'] = original;
-      }
-      if (Object.keys(maxScaled).length > 0) {
-        tokenStudio['Dynamic Text Size/Max scaled'] = maxScaled;
-      }
-    } else if (collectionName.includes('Image Size') || collectionName.includes('image')) {
-      // Handle image sizes
-      const imageSize: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'FLOAT' || variable.type === 'DIMENSION') {
-          imageSize[variable.name] = {
-            $value: variable.value,
-            $type: 'number'
-          };
-        }
-      });
-      
-      if (Object.keys(imageSize).length > 0) {
-        tokenStudio['Image Size/Mode 1'] = imageSize;
-      }
-    } else if (collectionName.includes('Icon Size') || collectionName.includes('icon')) {
-      // Handle icon sizes
-      const iconSize: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'FLOAT' || variable.type === 'DIMENSION') {
-          iconSize[variable.name] = {
-            $value: variable.value,
-            $type: 'number'
-          };
-        }
-      });
-      
-      if (Object.keys(iconSize).length > 0) {
-        tokenStudio['Icon Size/Mode 1'] = iconSize;
-      }
-    } else if (collectionName.includes('legacy') || collectionName.includes('Legacy')) {
-      // Handle legacy colors
-      const legacyColors: any = {};
-      const nearestColors: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'COLOR' || variable.type === 'PAINT_STYLE') {
-          // Convert to proper hex format
-          let colorValue = variable.value;
-          if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-            const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-            if (rgbaMatch) {
-              const r = parseInt(rgbaMatch[1]);
-              const g = parseInt(rgbaMatch[2]);
-              const b = parseInt(rgbaMatch[3]);
-              const a = parseFloat(rgbaMatch[4]);
-              
-              if (a === 1) {
-                colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-              } else {
-                const alpha = Math.round(a * 255);
-                colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
-              }
-            }
-          }
-          
-          legacyColors[variable.name] = {
-            $value: colorValue,
-            $type: 'color',
-            $description: variable.description || ''
-          };
-          
-          // Create nearest color reference (simplified mapping)
-          nearestColors[variable.name] = {
-            $value: `{Palette.Value.Greyscale.500}`, // Default reference
-            $type: 'color',
-            $description: variable.description || ''
-          };
-        }
-      });
-      
-      if (Object.keys(legacyColors).length > 0) {
-        tokenStudio['legacyMopColors/LegacyColorCode'] = legacyColors;
-        tokenStudio['legacyMopColors/NearestColor New UIPalette'] = nearestColors;
-      }
-    } else if (collectionName.includes('Gradient') || collectionName.includes('gradient')) {
-      // Handle gradient stops
-      const lightGradient: any = {};
-      const darkGradient: any = {};
-      
-      (variables as any[]).forEach((variable: any) => {
-        if ((variable.type === 'COLOR' || variable.type === 'PAINT_STYLE') && variable.value) {
-          const nameParts = variable.name.split('/');
-          if (nameParts.length >= 2) {
-            const gradientName = nameParts[0];
-            const stopName = nameParts[1];
-            
-            // Convert to proper hex format
-            let colorValue = variable.value;
-            if (typeof variable.value === 'string' && variable.value.startsWith('rgba')) {
-              const rgbaMatch = variable.value.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-              if (rgbaMatch) {
-                const r = parseInt(rgbaMatch[1]);
-                const g = parseInt(rgbaMatch[2]);
-                const b = parseInt(rgbaMatch[3]);
-                const a = parseFloat(rgbaMatch[4]);
-                
-                if (a === 1) {
-                  colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                } else {
-                  const alpha = Math.round(a * 255);
-                  colorValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${alpha.toString(16).padStart(2, '0')}`;
-                }
-              }
-            }
-            
-            // Determine if this is light or dark mode
-            const isLight = variable.modes && variable.modes.some((mode: string) => 
-              mode.toLowerCase().includes('light') || mode.toLowerCase().includes('original')
-            );
-            const isDark = variable.modes && variable.modes.some((mode: string) => 
-              mode.toLowerCase().includes('dark')
-            );
-            
-            if (isLight) {
-              if (!lightGradient[gradientName]) {
-                lightGradient[gradientName] = {};
-              }
-              lightGradient[gradientName][stopName] = {
-                $value: colorValue,
-                $type: 'color'
-              };
-            }
-            
-            if (isDark) {
-              if (!darkGradient[gradientName]) {
-                darkGradient[gradientName] = {};
-              }
-              darkGradient[gradientName][stopName] = {
-                $value: colorValue,
-                $type: 'color'
-              };
-            }
-          }
-        }
-      });
-      
-      if (Object.keys(lightGradient).length > 0) {
-        tokenStudio['Gradient stops/Light'] = lightGradient;
-      }
-      if (Object.keys(darkGradient).length > 0) {
-        tokenStudio['Gradient stops/Dark'] = darkGradient;
-      }
+    });
+    
+    // Add the collection to tokenStudio if it has tokens
+    if (Object.keys(collectionTokens).length > 0) {
+      tokenStudio[collectionName] = collectionTokens;
     }
   });
 
