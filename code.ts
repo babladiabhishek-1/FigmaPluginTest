@@ -1624,6 +1624,12 @@ function transformToTokenStudio(tokens: any): any {
     const collectionTokens: any = {};
     
     (variables as any[]).forEach((variable: any) => {
+      console.log(`Processing variable "${variable.name}" in collection "${collectionName}":`, {
+        type: variable.type,
+        value: variable.value,
+        hasValue: variable.value !== null && variable.value !== undefined
+      });
+      
       if (variable.value !== null && variable.value !== undefined) {
         // Determine the token type based on variable type
         let tokenType = 'other';
@@ -1692,6 +1698,9 @@ function transformToTokenStudio(tokens: any): any {
     // Add the collection to tokenStudio if it has tokens
     if (Object.keys(collectionTokens).length > 0) {
       tokenStudio[collectionName] = collectionTokens;
+      console.log(`Added collection "${collectionName}" with ${Object.keys(collectionTokens).length} tokens`);
+    } else {
+      console.log(`Skipped collection "${collectionName}" - no valid tokens found`);
     }
   });
 
