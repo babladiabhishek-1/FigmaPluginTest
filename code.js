@@ -623,9 +623,9 @@ async function getAllVariables() {
             let collectionHasAnyVariables = false;
             for (const mode of coll.modes) {
                 const setKey = `${coll.name}/${mode.name}`;
-                // Initialize array for this collection/mode
+                // Initialize object for this collection/mode
                 if (!categorizedVariables[setKey]) {
-                    categorizedVariables[setKey] = [];
+                    categorizedVariables[setKey] = {};
                 }
                 let resolvedCount = 0;
                 let skippedCount = 0;
