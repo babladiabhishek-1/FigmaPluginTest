@@ -115,28 +115,109 @@
       padding: 4px 0;
     }
     
-    .mode-item {
+    .mode-section {
+      margin: 4px 0;
+    }
+    
+    .mode-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 4px 16px;
+      padding: 6px 16px;
       font-size: 11px;
       color: #666;
-      border-left: 2px solid #f0f0f0;
+      border-left: 2px solid #e0e0e0;
       margin-left: 8px;
+      cursor: pointer;
+      background: #f8f8f8;
+      border-radius: 4px;
+      margin-bottom: 2px;
+    }
+    
+    .mode-header:hover {
+      background: #f0f0f0;
     }
     
     .mode-name {
-      font-weight: 500;
+      font-weight: 600;
+      color: #333;
     }
     
     .mode-count {
-      background: #f0f0f0;
-      color: #666;
+      background: #007aff;
+      color: white;
       padding: 2px 6px;
       border-radius: 10px;
       font-size: 10px;
       font-weight: 500;
+    }
+    
+    .mode-toggle {
+      font-size: 10px;
+      transition: transform 0.2s ease;
+    }
+    
+    .mode-header.active .mode-toggle {
+      transform: rotate(90deg);
+    }
+    
+    .mode-tokens {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      margin-left: 16px;
+    }
+    
+    .mode-tokens.expanded {
+      max-height: 400px;
+    }
+    
+    .token-item {
+      padding: 6px 12px;
+      margin: 2px 0;
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+    
+    .token-name {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 2px;
+    }
+    
+    .token-value {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      background: #f8f8f8;
+      padding: 2px 4px;
+      border-radius: 2px;
+      color: #007aff;
+      font-size: 9px;
+      margin: 2px 0;
+      word-break: break-all;
+    }
+    
+    .token-meta {
+      display: flex;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    
+    .token-type {
+      background: #e0e0e0;
+      color: #666;
+      padding: 1px 4px;
+      border-radius: 2px;
+      font-size: 9px;
+      font-weight: 500;
+    }
+    
+    .token-description {
+      color: #666;
+      font-size: 9px;
+      margin-top: 2px;
+      font-style: italic;
     }
 
     .category-items.expanded {
@@ -1317,9 +1398,24 @@
           
           // Create mode list for this collection
           const modeList = Object.entries(modes).map(([modeName, variables]) => `
-            <div class="mode-item">
-              <span class="mode-name">${modeName}</span>
-              <span class="mode-count">${variables.length}</span>
+            <div class="mode-section">
+              <div class="mode-header" data-mode="${baseCollectionName}/${modeName}">
+                <span class="mode-name">${modeName}</span>
+                <span class="mode-count">${variables.length}</span>
+                <span class="mode-toggle">▶</span>
+              </div>
+              <div class="mode-tokens">
+                ${variables.map(variable => `
+                  <div class="token-item" data-id="${variable.id}">
+                    <div class="token-name">${variable.name}</div>
+                    <div class="token-value">${variable.value || 'No value'}</div>
+                    <div class="token-meta">
+                      <span class="token-type">${variable.type}</span>
+                    </div>
+                    ${variable.description ? `<div class="token-description">${variable.description}</div>` : ''}
+                  </div>
+                `).join('')}
+              </div>
             </div>
           `).join('');
           
@@ -1392,6 +1488,33 @@
             categoryItems.classList.add('expanded');
             header.classList.add('active');
             header.querySelector('.category-toggle').textContent = '▼';
+          }
+        };
+      });
+      
+      // Add click handlers for mode headers
+      document.querySelectorAll('.mode-header').forEach(header => {
+        const modeName = header.getAttribute('data-mode');
+        
+        // Start with all modes collapsed by default
+        const modeTokens = header.nextElementSibling;
+        modeTokens.classList.remove('expanded');
+        header.classList.remove('active');
+        header.querySelector('.mode-toggle').textContent = '▶';
+        
+        // Enable toggle functionality
+        header.onclick = (event) => {
+          const modeTokens = header.nextElementSibling;
+          const isExpanded = modeTokens.classList.contains('expanded');
+          
+          if (isExpanded) {
+            modeTokens.classList.remove('expanded');
+            header.classList.remove('active');
+            header.querySelector('.mode-toggle').textContent = '▶';
+          } else {
+            modeTokens.classList.add('expanded');
+            header.classList.add('active');
+            header.querySelector('.mode-toggle').textContent = '▼';
           }
         };
       });
