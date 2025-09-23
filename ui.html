@@ -574,12 +574,12 @@
 <body>
   <!-- Side Panel -->
   <div id="side-panel">
-    <h3>Available Variables</h3>
+    <h3>Available Collections <span id="collection-count">(0)</span></h3>
     <div id="search-container" style="padding: 8px; border-bottom: 1px solid #404040;">
-      <input type="text" id="search-input" placeholder="Search variables..." value="" style="width: 100%; padding: 6px 8px; border: 1px solid #555; border-radius: 4px; background-color: #2c2c2c; color: #ffffff; font-size: 11px;">
+      <input type="text" id="search-input" placeholder="Search collections..." value="" style="width: 100%; padding: 6px 8px; border: 1px solid #555; border-radius: 4px; background-color: #2c2c2c; color: #ffffff; font-size: 11px;">
     </div>
     <div id="variables-list">
-      <div class="loading">Loading variables...</div>
+      <div class="loading">Loading collections...</div>
     </div>
   </div>
 
@@ -1236,11 +1236,13 @@
       // Store original data for search functionality
       if (categorizedVariables && Object.keys(categorizedVariables).length > 0) {
         originalCategorizedVariables = JSON.parse(JSON.stringify(categorizedVariables));
+        // Update collection count display
+        updateSelectionStatus();
       }
 
       if (!categorizedVariables || Object.keys(categorizedVariables).length === 0) {
         console.log('No variables to render');
-        variablesList.innerHTML = '<div class="loading">No variables found in this file.</div>';
+        variablesList.innerHTML = '<div class="loading">No collections found in this file.</div>';
         return;
       }
 
@@ -1361,6 +1363,12 @@
       const selectedCount = selectedCollections.size;
       const totalCount = Object.keys(originalCategorizedVariables || {}).length;
       const statusText = `${selectedCount} of ${totalCount} collections selected`;
+      
+      // Update collection count display
+      const collectionCountElement = document.getElementById('collection-count');
+      if (collectionCountElement) {
+        collectionCountElement.textContent = `(${totalCount})`;
+      }
       
       // Update status in console for now
       console.log(statusText);
