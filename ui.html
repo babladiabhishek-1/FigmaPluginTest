@@ -219,6 +219,14 @@
       margin-top: 2px;
       font-style: italic;
     }
+    
+    .empty-mode {
+      color: #888;
+      font-size: 10px;
+      font-style: italic;
+      padding: 8px 12px;
+      text-align: center;
+    }
 
     .category-items.expanded {
       max-height: 500px;
@@ -1393,8 +1401,8 @@
         const modes = groupedCollections[baseCollectionName];
         const totalVariables = Object.values(modes).reduce((sum, modeVars) => sum + modeVars.length, 0);
         
-        if (totalVariables > 0) {
-          hasVariables = true;
+        // Show all collections, even if they have no variables
+        hasVariables = true;
           
           // Create mode list for this collection
           const modeList = Object.entries(modes).map(([modeName, variables]) => `
@@ -1405,7 +1413,7 @@
                 <span class="mode-toggle">▶</span>
               </div>
               <div class="mode-tokens">
-                ${variables.map(variable => `
+                ${variables.length > 0 ? variables.map(variable => `
                   <div class="token-item" data-id="${variable.id}">
                     <div class="token-name">${variable.name}</div>
                     <div class="token-value">${variable.value || 'No value'}</div>
@@ -1414,7 +1422,7 @@
                     </div>
                     ${variable.description ? `<div class="token-description">${variable.description}</div>` : ''}
                   </div>
-                `).join('')}
+                `).join('') : '<div class="empty-mode">No variables found in this mode</div>'}
               </div>
             </div>
           `).join('');

@@ -752,9 +752,15 @@ async function getAllVariables() {
     // Build categorized variables for UI display (flat structure with arrays)
     const categorizedVariables: any = {};
 
+    console.log('Processing collections:', variableCollections.map(c => c.name));
+    console.log('Total collections found:', variableCollections.length);
+
     // Export loop: emit collection/mode → nested path and log every decision
     for (const coll of variableCollections) {
       const varsInColl = variables.filter(v => v.variableCollectionId === coll.id);
+      d('COLLECTION', { name: coll.name, modes: coll.modes.length, variables: varsInColl.length });
+      
+      let collectionHasAnyVariables = false;
       
       for (const mode of coll.modes) {
         const setKey = `${coll.name}/${mode.name}`;
@@ -764,11 +770,59 @@ async function getAllVariables() {
           categorizedVariables[setKey] = [];
         }
         
+        let resolvedCount = 0;
+        let skippedCount = 0;
+        
         for (const v of varsInColl) {
+          // Special debugging for gradient stops
+          if (coll.name.toLowerCase().includes('gradient')) {
+            d('GRADIENT_DEBUG', { 
+              name: v.name, 
+              setKey, 
+              modeId: mode.modeId,
+              variableType: v.resolvedType,
+              hasValue: !!v.valuesByMode?.[mode.modeId]
+            });
+          }
+          
           const res = resolveForMode(v.id, mode.modeId, variablesById, idToPath);
           if (!res) { 
-            w('EmitSkip', { name: v.name, setKey, reason: 'resolveForMode=null' }); 
-            continue; 
+            // Try to find any available value for this variable across all modes
+            let fallbackValue = null;
+            let fallbackType = 'unknown';
+            
+            for (const otherMode of coll.modes) {
+              const fallbackRes = resolveForMode(v.id, otherMode.modeId, variablesById, idToPath);
+              if (fallbackRes) {
+                fallbackValue = fallbackRes.finalValue;
+                fallbackType = fallbackRes.finalType;
+                d('FALLBACK', { name: v.name, setKey, fallbackMode: otherMode.name, value: fallbackValue });
+                break;
+              }
+            }
+            
+            if (!fallbackValue) {
+              w('EmitSkip', { name: v.name, setKey, reason: 'resolveForMode=null and no fallback' }); 
+              skippedCount++;
+              continue; 
+            }
+            
+            // Use fallback value
+            const variableData = {
+              id: v.id,
+              name: v.name,
+              type: fallbackType,
+              value: fallbackValue,
+              collection: coll.name,
+              mode: mode.name,
+              description: v.description || '',
+              isFallback: true
+            };
+            
+            categorizedVariables[setKey].push(variableData);
+            resolvedCount++;
+            d('EMIT_FALLBACK', { setKey, path: v.name, type: fallbackType, value: fallbackValue });
+            continue;
           }
           
           // Create variable data for UI display
@@ -783,8 +837,22 @@ async function getAllVariables() {
           };
           
           categorizedVariables[setKey].push(variableData);
+          resolvedCount++;
           d('EMIT', { setKey, path: v.name, type: res.finalType, value: res.finalValue, chain: res.chain });
         }
+        
+        d('MODE_RESULT', { setKey, resolved: resolvedCount, skipped: skippedCount, total: varsInColl.length });
+        
+        if (resolvedCount > 0) {
+          collectionHasAnyVariables = true;
+        }
+      }
+      
+      // Log if collection has no variables at all
+      if (!collectionHasAnyVariables) {
+        w('EMPTY_COLLECTION', { name: coll.name, totalVars: varsInColl.length });
+      } else {
+        d('COLLECTION_SUCCESS', { name: coll.name });
       }
     }
 
@@ -825,6 +893,13 @@ async function getAllVariables() {
       categorizedVariables['Paint Styles'].push(styleData);
     }
 
+    // Log collection summary for debugging
+    const collectionSummary = Object.entries(categorizedVariables).map(([key, vars]) => ({
+      collection: key,
+      count: Array.isArray(vars) ? vars.length : 0
+    }));
+    
+    console.log('Collection Summary:', collectionSummary);
     console.log('Returning categorized variables:', Object.keys(categorizedVariables));
     return categorizedVariables;
 

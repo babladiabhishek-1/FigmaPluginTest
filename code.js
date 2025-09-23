@@ -610,7 +610,7 @@ function e(t, ...args) { if (DEBUG)
     console.error(tag(`ERR:${t}`), ...S, ...args); }
 // Get all available variables for the side pane with categorization
 async function getAllVariables() {
-    var _a;
+    var _a, _b;
     try {
         // Get Figma variables and collections
         const variables = await figma.variables.getLocalVariablesAsync();
@@ -653,19 +653,65 @@ async function getAllVariables() {
         });
         // Build categorized variables for UI display (flat structure with arrays)
         const categorizedVariables = {};
+        console.log('Processing collections:', variableCollections.map(c => c.name));
+        console.log('Total collections found:', variableCollections.length);
         // Export loop: emit collection/mode → nested path and log every decision
         for (const coll of variableCollections) {
             const varsInColl = variables.filter(v => v.variableCollectionId === coll.id);
+            d('COLLECTION', { name: coll.name, modes: coll.modes.length, variables: varsInColl.length });
+            let collectionHasAnyVariables = false;
             for (const mode of coll.modes) {
                 const setKey = `${coll.name}/${mode.name}`;
                 // Initialize array for this collection/mode
                 if (!categorizedVariables[setKey]) {
                     categorizedVariables[setKey] = [];
                 }
+                let resolvedCount = 0;
+                let skippedCount = 0;
                 for (const v of varsInColl) {
+                    // Special debugging for gradient stops
+                    if (coll.name.toLowerCase().includes('gradient')) {
+                        d('GRADIENT_DEBUG', {
+                            name: v.name,
+                            setKey,
+                            modeId: mode.modeId,
+                            variableType: v.resolvedType,
+                            hasValue: !!((_a = v.valuesByMode) === null || _a === void 0 ? void 0 : _a[mode.modeId])
+                        });
+                    }
                     const res = resolveForMode(v.id, mode.modeId, variablesById, idToPath);
                     if (!res) {
-                        w('EmitSkip', { name: v.name, setKey, reason: 'resolveForMode=null' });
+                        // Try to find any available value for this variable across all modes
+                        let fallbackValue = null;
+                        let fallbackType = 'unknown';
+                        for (const otherMode of coll.modes) {
+                            const fallbackRes = resolveForMode(v.id, otherMode.modeId, variablesById, idToPath);
+                            if (fallbackRes) {
+                                fallbackValue = fallbackRes.finalValue;
+                                fallbackType = fallbackRes.finalType;
+                                d('FALLBACK', { name: v.name, setKey, fallbackMode: otherMode.name, value: fallbackValue });
+                                break;
+                            }
+                        }
+                        if (!fallbackValue) {
+                            w('EmitSkip', { name: v.name, setKey, reason: 'resolveForMode=null and no fallback' });
+                            skippedCount++;
+                            continue;
+                        }
+                        // Use fallback value
+                        const variableData = {
+                            id: v.id,
+                            name: v.name,
+                            type: fallbackType,
+                            value: fallbackValue,
+                            collection: coll.name,
+                            mode: mode.name,
+                            description: v.description || '',
+                            isFallback: true
+                        };
+                        categorizedVariables[setKey].push(variableData);
+                        resolvedCount++;
+                        d('EMIT_FALLBACK', { setKey, path: v.name, type: fallbackType, value: fallbackValue });
                         continue;
                     }
                     // Create variable data for UI display
@@ -679,8 +725,20 @@ async function getAllVariables() {
                         description: v.description || ''
                     };
                     categorizedVariables[setKey].push(variableData);
+                    resolvedCount++;
                     d('EMIT', { setKey, path: v.name, type: res.finalType, value: res.finalValue, chain: res.chain });
                 }
+                d('MODE_RESULT', { setKey, resolved: resolvedCount, skipped: skippedCount, total: varsInColl.length });
+                if (resolvedCount > 0) {
+                    collectionHasAnyVariables = true;
+                }
+            }
+            // Log if collection has no variables at all
+            if (!collectionHasAnyVariables) {
+                w('EMPTY_COLLECTION', { name: coll.name, totalVars: varsInColl.length });
+            }
+            else {
+                d('COLLECTION_SUCCESS', { name: coll.name });
             }
         }
         // Get paint styles and add them
@@ -691,7 +749,7 @@ async function getAllVariables() {
                 const paint = style.paints[0];
                 if (paint.type === 'SOLID') {
                     const { r, g, b } = paint.color;
-                    const a = (_a = paint.opacity) !== null && _a !== void 0 ? _a : 1;
+                    const a = (_b = paint.opacity) !== null && _b !== void 0 ? _b : 1;
                     const red = Math.round(r * 255);
                     const green = Math.round(g * 255);
                     const blue = Math.round(b * 255);
@@ -717,6 +775,12 @@ async function getAllVariables() {
             }
             categorizedVariables['Paint Styles'].push(styleData);
         }
+        // Log collection summary for debugging
+        const collectionSummary = Object.entries(categorizedVariables).map(([key, vars]) => ({
+            collection: key,
+            count: Array.isArray(vars) ? vars.length : 0
+        }));
+        console.log('Collection Summary:', collectionSummary);
         console.log('Returning categorized variables:', Object.keys(categorizedVariables));
         return categorizedVariables;
     }
