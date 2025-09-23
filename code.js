@@ -499,8 +499,8 @@ function filterVariablesByCollections(categorizedVariables, selectedCollections)
     });
     return filtered;
 }
-const toHex = (n) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
-const rgbaToHex = ({ r, g, b, a }) => `#${toHex(r)}${toHex(g)}${toHex(b)}${a < 1 ? toHex(a) : ''}`;
+const toHexNew = (n) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
+const rgbaToHex = ({ r, g, b, a }) => `#${toHexNew(r)}${toHexNew(g)}${toHexNew(b)}${a < 1 ? toHexNew(a) : ''}`;
 const typeMap = (t) => t === 'COLOR' ? 'color' : t === 'FLOAT' ? 'number' : t.toLowerCase();
 /** Resolve a variable's value for a given modeId, following aliases across collections. */
 function resolveForMode(varId, modeId, variablesById, idToPath, seen = new Set()) {

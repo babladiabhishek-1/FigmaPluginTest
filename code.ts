@@ -580,8 +580,8 @@ type ModeValue =
   | { type: 'BOOLEAN'; value: boolean }
   | { type: 'VARIABLE_ALIAS'; id: string };
 
-const toHex = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
-const rgbaToHex = ({ r, g, b, a }: { r: number; g: number; b: number; a: number }) => `#${toHex(r)}${toHex(g)}${toHex(b)}${a < 1 ? toHex(a) : ''}`;
+const toHexNew = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0').toLowerCase();
+const rgbaToHex = ({ r, g, b, a }: { r: number; g: number; b: number; a: number }) => `#${toHexNew(r)}${toHexNew(g)}${toHexNew(b)}${a < 1 ? toHexNew(a) : ''}`;
 
 const typeMap = (t: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN') =>
   t === 'COLOR' ? 'color' : t === 'FLOAT' ? 'number' : t.toLowerCase();
