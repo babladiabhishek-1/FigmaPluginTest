@@ -195,12 +195,17 @@ function transformToStyleDictionary(tokens: any): any {
         Object.prototype.hasOwnProperty.call(node, '$type')) {
       const tokenName = toKebab(pathArr.join('-'));
       if (!out[bucketKey]) out[bucketKey] = {};
-      out[bucketKey][tokenName] = {
+      const token: any = {
         value: node.$value,
         // SD prefers "dimension" for numeric tokens
-        type: node.$type === 'number' ? 'dimension' : node.$type,
-        ...(node.$description ? { description: node.$description } : {})
+        type: node.$type === 'number' ? 'dimension' : node.$type
       };
+      
+      if (node.$description) {
+        token.description = node.$description;
+      }
+      
+      out[bucketKey][tokenName] = token;
       return;
     }
 
@@ -1671,11 +1676,16 @@ function transformToTokenStudio(tokens: any): any {
         }
         
         const finalKey = nameParts[nameParts.length - 1];
-        current[finalKey] = {
+        const token: any = {
           $value: tokenValue,
-          $type: tokenType,
-          ...(variable.description ? { $description: variable.description } : {})
+          $type: tokenType
         };
+        
+        if (variable.description) {
+          token.$description = variable.description;
+        }
+        
+        current[finalKey] = token;
       }
     });
     
