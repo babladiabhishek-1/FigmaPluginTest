@@ -1860,46 +1860,49 @@ function transformToTokenStudio(tokens: any): any {
         if (variable.type === 'FLOAT' || variable.type === 'DIMENSION') {
           const baseValue = variable.value;
           
-          // Portrait values (default)
-          portrait[variable.name] = {
-            $value: baseValue,
-            $type: 'number',
-            $description: variable.description || ''
-          };
-          
-          // Landscape values (adjusted)
-          let landscapeValue = baseValue;
-          if (variable.name.toLowerCase().includes('width') && typeof baseValue === 'number') {
-            landscapeValue = Math.round(baseValue * 0.6);
-          } else if (variable.name.toLowerCase().includes('height') && typeof baseValue === 'number') {
-            landscapeValue = Math.round(baseValue * 1.2);
+          // Only add if we have a valid value
+          if (baseValue !== null && baseValue !== undefined) {
+            // Portrait values (default)
+            portrait[variable.name] = {
+              $value: baseValue,
+              $type: 'number',
+              $description: variable.description || ''
+            };
+            
+            // Landscape values (adjusted)
+            let landscapeValue = baseValue;
+            if (variable.name.toLowerCase().includes('width') && typeof baseValue === 'number') {
+              landscapeValue = Math.round(baseValue * 0.6);
+            } else if (variable.name.toLowerCase().includes('height') && typeof baseValue === 'number') {
+              landscapeValue = Math.round(baseValue * 1.2);
+            }
+            
+            landscape[variable.name] = {
+              $value: landscapeValue,
+              $type: 'number',
+              $description: variable.description || ''
+            };
+            
+            // Tablet values (adjusted)
+            let tabletPortraitValue = baseValue;
+            let tabletLandscapeValue = baseValue;
+            if (typeof baseValue === 'number') {
+              tabletPortraitValue = Math.round(baseValue * 1.1);
+              tabletLandscapeValue = Math.round(baseValue * 0.8);
+            }
+            
+            tabletPortrait[variable.name] = {
+              $value: tabletPortraitValue,
+              $type: 'number',
+              $description: variable.description || ''
+            };
+            
+            tabletLandscape[variable.name] = {
+              $value: tabletLandscapeValue,
+              $type: 'number',
+              $description: variable.description || ''
+            };
           }
-          
-          landscape[variable.name] = {
-            $value: landscapeValue,
-            $type: 'number',
-            $description: variable.description || ''
-          };
-          
-          // Tablet values (adjusted)
-          let tabletPortraitValue = baseValue;
-          let tabletLandscapeValue = baseValue;
-          if (typeof baseValue === 'number') {
-            tabletPortraitValue = Math.round(baseValue * 1.1);
-            tabletLandscapeValue = Math.round(baseValue * 0.8);
-          }
-          
-          tabletPortrait[variable.name] = {
-            $value: tabletPortraitValue,
-            $type: 'number',
-            $description: variable.description || ''
-          };
-          
-          tabletLandscape[variable.name] = {
-            $value: tabletLandscapeValue,
-            $type: 'number',
-            $description: variable.description || ''
-          };
         }
       });
       
@@ -2028,7 +2031,7 @@ function transformToTokenStudio(tokens: any): any {
       const darkGradient: any = {};
       
       (variables as any[]).forEach((variable: any) => {
-        if (variable.type === 'COLOR' || variable.type === 'PAINT_STYLE') {
+        if ((variable.type === 'COLOR' || variable.type === 'PAINT_STYLE') && variable.value) {
           const nameParts = variable.name.split('/');
           if (nameParts.length >= 2) {
             const gradientName = nameParts[0];
@@ -2096,6 +2099,31 @@ function transformToTokenStudio(tokens: any): any {
   // Set metadata token set order based on what we actually created
   const tokenSetOrder = Object.keys(tokenStudio).filter(key => key !== '$themes' && key !== '$metadata');
   tokenStudio.$metadata.tokenSetOrder = tokenSetOrder;
+
+  // Clean up any tokens that don't have $value properties
+  Object.keys(tokenStudio).forEach(key => {
+    if (key !== '$themes' && key !== '$metadata') {
+      const tokenSet = tokenStudio[key];
+      if (typeof tokenSet === 'object') {
+        Object.keys(tokenSet).forEach(tokenKey => {
+          const token = tokenSet[tokenKey];
+          if (typeof token === 'object' && !token.$value) {
+            // Remove tokens without values
+            delete tokenSet[tokenKey];
+          }
+        });
+        
+        // If the token set is now empty, remove it
+        if (Object.keys(tokenSet).length === 0) {
+          delete tokenStudio[key];
+        }
+      }
+    }
+  });
+
+  // Update token set order after cleanup
+  const finalTokenSetOrder = Object.keys(tokenStudio).filter(key => key !== '$themes' && key !== '$metadata');
+  tokenStudio.$metadata.tokenSetOrder = finalTokenSetOrder;
 
   console.log('Token Studio structure created:', Object.keys(tokenStudio));
   console.log('Token set order:', tokenSetOrder);
