@@ -646,6 +646,7 @@ async function getAllVariables() {
                         skippedCount++;
                         continue;
                     }
+                    d('RESOLVE_SUCCESS', { name: v.name, setKey, type: res.finalType, value: res.finalValue });
                     const path = v.name.split('/').map(s => s.trim()).filter(Boolean);
                     const entry = { $value: res.finalValue, $type: res.finalType };
                     if ((_b = v.description) === null || _b === void 0 ? void 0 : _b.trim())
@@ -746,6 +747,13 @@ async function getAllVariables() {
         }));
         console.log('Collection Summary:', collectionSummary);
         console.log('Returning categorized variables:', Object.keys(uiVariables));
+        console.log('Total collections found:', Object.keys(uiVariables).length);
+        console.log('Total variables across all collections:', Object.values(uiVariables).reduce((sum, vars) => sum + (Array.isArray(vars) ? vars.length : 0), 0));
+        if (Object.keys(uiVariables).length === 0) {
+            console.error('ERROR: No collections found! This means the data processing failed.');
+            console.log('categorizedVariables keys:', Object.keys(categorizedVariables));
+            console.log('categorizedVariables sample:', Object.entries(categorizedVariables).slice(0, 2));
+        }
         return uiVariables;
     }
     catch (error) {
