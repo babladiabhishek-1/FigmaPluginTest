@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["ES2017", "DOM"],
+    "module": "commonjs",
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "declaration": false,
+    "outDir": "./",
+    "rootDir": "./",
+    "types": ["@figma/plugin-typings"]
+  },
+  "include": ["*.ts"],
+  "exclude": ["node_modules"]
+}

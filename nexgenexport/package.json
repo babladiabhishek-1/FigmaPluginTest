@@ -1,0 +1,17 @@
+{
+  "name": "nexgenexport",
+  "version": "1.0.0",
+  "description": "Clean Figma plugin for exporting design tokens",
+  "main": "code.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "keywords": ["figma", "design-tokens", "export"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.88.0",
+    "typescript": "^5.0.0"
+  }
+}
